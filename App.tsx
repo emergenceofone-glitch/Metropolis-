@@ -39,6 +39,7 @@ function App() {
   const [stats, setStats] = useState<CityStats>({ money: INITIAL_MONEY, population: 0, day: 1 });
   const [selectedTool, setSelectedTool] = useState<BuildingType>(BuildingType.Road);
   const [hoveredTileData, setHoveredTileData] = useState<TileData | null>(null);
+  const [weather, setWeather] = useState<WeatherState>({ isRaining: false, isFoggy: false, isSnowing: false });
   
   // --- AI State ---
   const [currentGoal, setCurrentGoal] = useState<AIGoal | null>(null);
@@ -273,6 +274,7 @@ function App() {
         onTileClick={handleTileClick} 
         hoveredTool={selectedTool}
         population={stats.population}
+        weather={weather}
         onHoverTile={(x, y) => {
           if (x >= 0 && y >= 0) {
             setHoveredTileData(grid[y][x]);
@@ -299,6 +301,8 @@ function App() {
           isGeneratingGoal={isGeneratingGoal}
           aiEnabled={aiEnabled}
           hoveredTile={hoveredTileData}
+          weather={weather}
+          onToggleWeather={(w) => setWeather(prev => ({ ...prev, ...w }))}
         />
       )}
     </div>

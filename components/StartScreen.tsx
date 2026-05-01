@@ -14,21 +14,21 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart }) => {
   const [aiEnabled, setAiEnabled] = useState(true);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0c111d]/60 backdrop-blur-xl">
+    <div className="absolute inset-0 flex items-center justify-center z-50 bg-[#0c111d]/60 backdrop-blur-xl p-4 overflow-y-auto">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md w-full p-12 text-center"
+        className="max-w-md w-full p-6 md:p-12 text-center my-auto"
       >
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          <h1 className="text-6xl font-black text-white tracking-tighter mb-4">
-            SKY<span className="text-slate-500 text-4xl block md:inline md:ml-2">METROPOLIS</span>
+          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter mb-4">
+            SKY<span className="text-slate-500 text-3xl md:text-4xl block md:inline md:ml-2">METROPOLIS</span>
           </h1>
-          <p className="text-slate-400 text-sm font-medium uppercase tracking-[0.3em] mb-12">
+          <p className="text-slate-400 text-[10px] md:text-sm font-medium uppercase tracking-[0.3em] mb-8 md:mb-12">
             Atmospheric City Management
           </p>
         </motion.div>

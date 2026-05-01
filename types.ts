@@ -38,6 +38,12 @@ export interface CityStats {
   day: number;
 }
 
+export interface WeatherState {
+  isRaining: boolean;
+  isFoggy: boolean;
+  isSnowing: boolean;
+}
+
 export interface AIGoal {
   description: string;
   targetType: 'population' | 'money' | 'building_count';

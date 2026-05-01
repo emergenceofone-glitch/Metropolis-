@@ -746,7 +746,7 @@ const PopulationSystem = ({ population, grid }: { population: number, grid: Grid
 };
 
 // Clouds & Birds
-const Cloud = ({ position, scale, speed }: { position: [number, number, number], scale: number, speed: number }) => {
+const Cloud = ({ position, scale, speed, isDark = false }: { position: [number, number, number], scale: number, speed: number, isDark?: boolean }) => {
     const group = useRef<THREE.Group>(null);
     useFrame((state, delta) => {
         if (group.current) {
@@ -764,12 +764,89 @@ const Cloud = ({ position, scale, speed }: { position: [number, number, number],
         <group ref={group} position={position} scale={scale}>
             {bubbles.map((b, i) => (
                 <mesh key={i} geometry={sphereGeo} position={b.pos} scale={b.scale} castShadow>
-                    <meshStandardMaterial color="white" flatShading opacity={0.9} transparent />
+                    <meshStandardMaterial color={isDark ? "#4b5563" : "white"} flatShading opacity={isDark ? 0.95 : 0.9} transparent />
                 </mesh>
             ))}
         </group>
     )
 }
+
+const RainEffect = ({ count = 500 }: { count?: number }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const rainData = useMemo(() => {
+    const data = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      data[i * 3] = getRandomRange(-GRID_SIZE, GRID_SIZE); // x
+      data[i * 3 + 1] = getRandomRange(0, 15); // y
+      data[i * 3 + 2] = getRandomRange(-GRID_SIZE, GRID_SIZE); // z
+    }
+    return data;
+  }, [count]);
+
+  const rainGeometry = useMemo(() => new THREE.CylinderGeometry(0.01, 0.01, 0.3, 4), []);
+  const rainMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#60a5fa', transparent: true, opacity: 0.6 }), []);
+
+  useFrame((state, delta) => {
+    if (!meshRef.current) return;
+    for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+        rainData[idx + 1] -= delta * 20; // speed
+        if (rainData[idx + 1] < -2) {
+            rainData[idx + 1] = 15;
+            rainData[idx] = getRandomRange(-GRID_SIZE, GRID_SIZE);
+            rainData[idx + 2] = getRandomRange(-GRID_SIZE, GRID_SIZE);
+        }
+        dummy.position.set(rainData[idx], rainData[idx + 1], rainData[idx + 2]);
+        dummy.updateMatrix();
+        meshRef.current.setMatrixAt(i, dummy.matrix);
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[rainGeometry, rainMaterial, count]} />
+  );
+};
+
+const SnowEffect = ({ count = 800 }: { count?: number }) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const snowData = useMemo(() => {
+    const data = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+        data[i * 3] = getRandomRange(-GRID_SIZE, GRID_SIZE); // x
+        data[i * 3 + 1] = getRandomRange(0, 15); // y
+        data[i * 3 + 2] = getRandomRange(-GRID_SIZE, GRID_SIZE); // z
+    }
+    return data;
+  }, [count]);
+
+  const snowGeometry = useMemo(() => new THREE.SphereGeometry(0.04, 4, 4), []);
+  const snowMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 'white', transparent: true, opacity: 0.8 }), []);
+
+  useFrame((state, delta) => {
+    if (!meshRef.current) return;
+    for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+        snowData[idx + 1] -= delta * 2; // slow fall
+        snowData[idx] += Math.sin(state.clock.elapsedTime + i) * 0.01; // sway
+        if (snowData[idx + 1] < -2) {
+            snowData[idx + 1] = 15;
+            snowData[idx] = getRandomRange(-GRID_SIZE, GRID_SIZE);
+            snowData[idx + 2] = getRandomRange(-GRID_SIZE, GRID_SIZE);
+        }
+        dummy.position.set(snowData[idx], snowData[idx + 1], snowData[idx + 2]);
+        dummy.updateMatrix();
+        meshRef.current.setMatrixAt(i, dummy.matrix);
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    <instancedMesh ref={meshRef} args={[snowGeometry, snowMaterial, count]} />
+  );
+};
 
 const Bird = ({ position, speed, offset }: { position: [number, number, number], speed: number, offset: number }) => {
     const ref = useRef<THREE.Group>(null);
@@ -791,20 +868,25 @@ const Bird = ({ position, speed, offset }: { position: [number, number, number],
     )
 }
 
-const EnvironmentEffects = () => {
+const EnvironmentEffects = ({ isRaining, isSnowing }: { isRaining: boolean, isSnowing: boolean }) => {
     return (
         <group raycast={() => null}>
              {/* Clouds */}
-            <Cloud position={[-12, 8, 4]} scale={1.5} speed={0.3} />
-            <Cloud position={[5, 9, -8]} scale={1.2} speed={0.5} />
-            <Cloud position={[15, 7, 10]} scale={1.8} speed={0.2} />
+            <Cloud position={[-12, 8, 4]} scale={1.5} speed={0.3} isDark={isRaining || isSnowing} />
+            <Cloud position={[5, 9, -8]} scale={1.2} speed={0.5} isDark={isRaining || isSnowing} />
+            <Cloud position={[15, 7, 10]} scale={1.8} speed={0.2} isDark={isRaining || isSnowing} />
             
+            {isRaining && <RainEffect />}
+            {isSnowing && <SnowEffect />}
+
             {/* Birds */}
-            <group position={[0, 0, 0]} scale={0.8}>
-                <Bird position={[0, 0, 10]} speed={0.6} offset={0} />
-                <Bird position={[0, 0, 10]} speed={0.6} offset={1.2} />
-                <Bird position={[0, 0, 10]} speed={0.6} offset={2.5} />
-            </group>
+            {!isRaining && !isSnowing && (
+                <group position={[0, 0, 0]} scale={0.8}>
+                    <Bird position={[0, 0, 10]} speed={0.6} offset={0} />
+                    <Bird position={[0, 0, 10]} speed={0.6} offset={1.2} />
+                    <Bird position={[0, 0, 10]} speed={0.6} offset={2.5} />
+                </group>
+            )}
 
             {/* Water */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, 0]} receiveShadow>
@@ -923,9 +1005,10 @@ interface IsoMapProps {
   onHoverTile: (x: number, y: number) => void;
   hoveredTool: BuildingType;
   population: number;
+  weather: { isRaining: boolean, isFoggy: boolean, isSnowing: boolean };
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population, weather }) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>(null);
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -960,20 +1043,21 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
           target={[0,-0.5,0]}
         />
 
-        <ambientLight intensity={0.5} color="#cceeff" />
+        <ambientLight intensity={weather.isRaining || weather.isSnowing ? 0.3 : 0.5} color={weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : "#cceeff")} />
         <directionalLight
           castShadow
           position={[15, 20, 10]}
-          intensity={2}
-          color="#fffbeb"
+          intensity={weather.isRaining || weather.isSnowing ? 1 : 2}
+          color={weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : "#fffbeb")}
           shadow-mapSize={[2048, 2048]}
           shadow-camera-left={-15} shadow-camera-right={15}
           shadow-camera-top={15} shadow-camera-bottom={-15}
         >
         </directionalLight>
-        <Environment preset="city" />
+        {(weather.isFoggy || weather.isSnowing) && <fog attach="fog" args={[weather.isSnowing ? '#f8fafc' : '#475569', 10, 60]} />}
+        <Environment preset={weather.isRaining ? "night" : (weather.isSnowing ? "apartment" : "city")} />
 
-        <EnvironmentEffects />
+        <EnvironmentEffects isRaining={weather.isRaining} isSnowing={weather.isSnowing} />
 
         <group>
           {grid.map((row, y) =>
