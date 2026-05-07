@@ -1,6 +1,6 @@
 {
-  "name": "Remix: Sky Metropolis",
-  "description": "Manage a virtual metropolis and fulfill tasks provided by Gemini.",
+  "name": "Sky Metropolis",
+  "description": "An atmospheric city management builder where you cultivate a thriving metropolis above the clouds, guided by AI objectives and dynamic weather effects.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

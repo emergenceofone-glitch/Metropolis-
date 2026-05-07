@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Grid, TileData, BuildingType, CityStats, AIGoal, NewsItem } from './types';
+import { Grid, TileData, BuildingType, CityStats, AIGoal, NewsItem, HintIndicator, WeatherState } from './types';
 import { GRID_SIZE, BUILDINGS, TICK_RATE_MS, INITIAL_MONEY } from './constants';
 import IsoMap from './components/IsoMap';
 import UIOverlay from './components/UIOverlay';
@@ -36,10 +36,19 @@ function App() {
   const [aiEnabled, setAiEnabled] = useState(true);
 
   const [grid, setGrid] = useState<Grid>(createInitialGrid);
-  const [stats, setStats] = useState<CityStats>({ money: INITIAL_MONEY, population: 0, day: 1 });
+  const [stats, setStats] = useState<CityStats>({ 
+    money: INITIAL_MONEY, 
+    population: 0, 
+    day: 1, 
+    happiness: 75,
+    cityLevel: 1,
+    experience: 0
+  });
   const [selectedTool, setSelectedTool] = useState<BuildingType>(BuildingType.Road);
   const [hoveredTileData, setHoveredTileData] = useState<TileData | null>(null);
-  const [weather, setWeather] = useState<WeatherState>({ isRaining: false, isFoggy: false, isSnowing: false });
+  const [weather, setWeather] = useState<WeatherState>({ isRaining: false, isFoggy: false, isSnowing: false, cycle: 'noon' });
+  const [taxRate, setTaxRate] = useState(10); // 10% base
+  const [hints, setHints] = useState<HintIndicator[]>([]);
   
   // --- AI State ---
   const [currentGoal, setCurrentGoal] = useState<AIGoal | null>(null);
@@ -62,6 +71,14 @@ function App() {
 
   const addNewsItem = useCallback((item: NewsItem) => {
     setNewsFeed(prev => [...prev.slice(-12), item]); // Keep last few
+  }, []);
+
+  const triggerHint = useCallback((x: number, y: number, text: string, color: string = '#ffffff') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setHints(prev => [...prev, { id, x, y, text, color }]);
+    setTimeout(() => {
+      setHints(prev => prev.filter(h => h.id !== id));
+    }, 2000); // 2 seconds lifecycle
   }, []);
 
   const fetchNewGoal = useCallback(async () => {
@@ -108,37 +125,86 @@ function App() {
 
     const intervalId = setInterval(() => {
       // 1. Calculate income/pop gen
-      let dailyIncome = 0;
-      let dailyPopGrowth = 0;
+      let totalBaseIncome = 0;
+      let totalBasePopGrowth = 0;
       let buildingCounts: Record<string, number> = {};
+      let industrialCount = 0;
+      let parkCount = 0;
+      let monumentCount = 0;
 
       gridRef.current.flat().forEach(tile => {
         if (tile.buildingType !== BuildingType.None) {
           const config = BUILDINGS[tile.buildingType];
           const level = tile.level || 1;
-          dailyIncome += config.incomeGen * level;
-          dailyPopGrowth += config.popGen * level;
+          const income = config.incomeGen * level;
+          const pop = config.popGen * level;
+
+          totalBaseIncome += income;
+          totalBasePopGrowth += pop;
           buildingCounts[tile.buildingType] = (buildingCounts[tile.buildingType] || 0) + 1;
+          
+          if (tile.buildingType === BuildingType.Industrial) industrialCount++;
+          if (tile.buildingType === BuildingType.Park) parkCount++;
+          if (tile.buildingType === BuildingType.Monument) monumentCount++;
+
+          // Periodic hints for active buildings
+          if (Math.random() < 0.1) {
+             if (income > 0) triggerHint(tile.x, tile.y, `+$${income}`, '#4ade80');
+             if (pop > 0) triggerHint(tile.x, tile.y, `+${pop} Pop`, '#60a5fa');
+          }
         }
       });
 
-      // Cap population growth by residential count just for some logic
-      const resCount = buildingCounts[BuildingType.Residential] || 0;
-      const maxPop = resCount * 50; // 50 people per house max
+      // 2. Happiness Calculation
+      // Tax penalty: > 15% reduces happiness, < 10% increases it
+      const taxImpact = (10 - taxRate) * 2; 
+      // Industrial penalty: people hate factories near their city (simplified to total count for now)
+      const pollutionImpact = industrialCount * -1;
+      // Park bonus
+      const parkImpact = parkCount * 3;
+      // Monument bonus
+      const monumentImpact = monumentCount * 15;
+      
+      const newHappiness = Math.min(100, Math.max(0, statsRef.current.happiness + (taxImpact + pollutionImpact + parkImpact + monumentImpact) / 10));
 
-      // 2. Update Stats
+      // 3. Modifiers based on Happiness
+      const happinessMultiplier = newHappiness / 100; // 0 to 1
+      const effectivePopGrowth = totalBasePopGrowth * happinessMultiplier;
+      // Tax Income calc: (Base Income) * (Tax Rate / 10) * (Happiness Modifier)
+      const effectiveIncome = totalBaseIncome * (taxRate / 10) * (newHappiness / 75);
+
+      // Cap population growth by residential count
+      const resCount = buildingCounts[BuildingType.Residential] || 0;
+      const maxPop = resCount * 50;
+
+      // 4. Update Stats
       setStats(prev => {
-        let newPop = prev.population + dailyPopGrowth;
-        if (newPop > maxPop) newPop = maxPop; // limit
-        if (resCount === 0 && prev.population > 0) newPop = Math.max(0, prev.population - 5); // people leave if no homes
+        let newPop = prev.population + effectivePopGrowth;
+        if (newPop > maxPop) newPop = maxPop;
+        if (resCount === 0 && prev.population > 0) newPop = Math.max(0, prev.population - 5);
+
+        // Experience from population growth
+        const newExperience = prev.experience + effectivePopGrowth;
+        const expToNextLevel = prev.cityLevel * 500;
+        let newLevel = prev.cityLevel;
+        let finalExperience = newExperience;
+
+        if (newExperience >= expToNextLevel) {
+           newLevel += 1;
+           finalExperience = 0; // Reset for next level
+           addNewsItem({id: Date.now().toString(), text: `City reached Level ${newLevel}! New opportunities await.`, type: 'positive'});
+        }
 
         const newStats = {
-          money: prev.money + dailyIncome,
+          money: prev.money + effectiveIncome,
           population: newPop,
           day: prev.day + 1,
+          happiness: newHappiness,
+          cityLevel: newLevel,
+          experience: finalExperience,
         };
         
-        // 3. Check Goal Completion
+        // 5. Check Goal Completion
         const goal = goalRef.current;
         if (aiEnabledRef.current && goal && !goal.completed) {
           let isMet = false;
@@ -156,7 +222,31 @@ function App() {
         return newStats;
       });
 
-      // 4. Trigger news
+      // 6. Automatic Weather & Cycle
+      setWeather(prev => {
+        const nextDay = (statsRef.current.day % 40); // 40 ticks = full cycle
+        let cycle = prev.cycle;
+        if (nextDay === 0) cycle = 'morning';
+        else if (nextDay === 10) cycle = 'noon';
+        else if (nextDay === 20) cycle = 'evening';
+        else if (nextDay === 30) cycle = 'night';
+
+        // Chance to change weather conditions
+        let isRaining = prev.isRaining;
+        let isSnowing = prev.isSnowing;
+        let isFoggy = prev.isFoggy;
+
+        if (Math.random() < 0.05) {
+           const rand = Math.random();
+           if (rand < 0.3) { isRaining = !isRaining; isSnowing = false; }
+           else if (rand < 0.6) { isSnowing = !isSnowing; isRaining = false; }
+           else { isFoggy = !isFoggy; }
+        }
+
+        return { ...prev, cycle, isRaining, isSnowing, isFoggy };
+      });
+
+      // 7. Trigger news
       fetchNews();
 
     }, TICK_RATE_MS);
@@ -188,6 +278,7 @@ function App() {
             newGrid[y][x] = { ...currentTile, buildingType: BuildingType.None };
             setGrid(newGrid);
             setStats(prev => ({ ...prev, money: prev.money - demolishCost }));
+            triggerHint(x, y, `-$${demolishCost}`, '#ef4444');
             // Sound effect here
         } else {
             addNewsItem({id: Date.now().toString(), text: "Cannot afford demolition costs.", type: 'negative'});
@@ -210,6 +301,7 @@ function App() {
           const newGrid = currentGrid.map(row => [...row]);
           newGrid[y][x] = { ...currentTile, level: currentLevel + 1 };
           setGrid(newGrid);
+          triggerHint(x, y, `Level Up!`, '#fbbf24');
           
           audioService.playUpgrade();
           addNewsItem({
@@ -244,6 +336,7 @@ function App() {
         const newGrid = currentGrid.map(row => [...row]);
         newGrid[y][x] = { ...currentTile, buildingType: tool, level: 1 };
         setGrid(newGrid);
+        triggerHint(x, y, `Built!`, buildingConfig.color);
         audioService.playPlacement();
       } else {
         // Not enough money feedback
@@ -275,6 +368,7 @@ function App() {
         hoveredTool={selectedTool}
         population={stats.population}
         weather={weather}
+        hints={hints}
         onHoverTile={(x, y) => {
           if (x >= 0 && y >= 0) {
             setHoveredTileData(grid[y][x]);
@@ -293,6 +387,8 @@ function App() {
       {gameStarted && (
         <UIOverlay
           stats={stats}
+          taxRate={taxRate}
+          onTaxChange={setTaxRate}
           selectedTool={selectedTool}
           onSelectTool={setSelectedTool}
           currentGoal={currentGoal}

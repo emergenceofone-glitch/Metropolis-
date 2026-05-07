@@ -4,11 +4,12 @@
 */
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
-import { MapControls, Environment, SoftShadows, Instance, Instances, Float, useTexture, Outlines, OrthographicCamera } from '@react-three/drei';
+import { MapControls, Environment, SoftShadows, Instance, Instances, Float, useTexture, Outlines, OrthographicCamera, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { MathUtils } from 'three';
-import { Grid, BuildingType, TileData } from '../types';
+import { Grid, BuildingType, TileData, HintIndicator, WeatherState } from '../types';
 import { GRID_SIZE, BUILDINGS } from '../constants';
+import { motion, AnimatePresence } from 'motion/react';
 
 // Fix for TypeScript not recognizing R3F elements in JSX
 declare global {
@@ -86,9 +87,10 @@ interface BuildingMeshProps {
   level?: number;
   opacity?: number;
   transparent?: boolean;
+  isNight?: boolean;
 }
 
-const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opacity = 1, transparent = false }: BuildingMeshProps) => {
+const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opacity = 1, transparent = false, isNight = false }: BuildingMeshProps) => {
   const hash = getHash(x, y);
   const variant = Math.floor(hash * 100); // 0-99
   const rotation = Math.floor(hash * 4) * (Math.PI / 2);
@@ -133,8 +135,12 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
           const mesh = child as THREE.Mesh;
           const mat = mesh.material as THREE.MeshStandardMaterial;
           if (mat && mat.emissive) {
-            // Only pulse buildings that are leveling up
-            mat.emissiveIntensity = glow;
+            // Level up glow or night window glow
+            if (mat.color.getHex() === 0xbfdbfe) { // Window color
+                mat.emissiveIntensity = isNight ? 1.5 : glow;
+            } else {
+                mat.emissiveIntensity = glow;
+            }
           }
         }
       });
@@ -492,6 +498,24 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                 })}
               </group>
             );
+          case BuildingType.Monument:
+             return (
+               <>
+                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.1, 0]} scale={[1, 0.2, 1]} />
+                 <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 1.2, 0]} scale={[0.4, 2.4, 0.4]} />
+                 <mesh {...commonProps} material={new THREE.MeshStandardMaterial({ color: '#facc15', emissive: '#facc15', emissiveIntensity: 1 })} geometry={sphereGeo} position={[0, 2.5, 0]} scale={0.3} />
+                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.6, 0]} scale={[0.6, 0.1, 0.6]} />
+                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 1.2, 0]} scale={[0.7, 0.1, 0.7]} />
+                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 1.8, 0]} scale={[0.6, 0.1, 0.6]} />
+                 {/* Decorative rings */}
+                 <mesh geometry={new THREE.TorusGeometry(0.8, 0.05, 16, 32)} position={[0, 0.8, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                    <meshStandardMaterial color={baseColor} emissive={baseColor} emissiveIntensity={isNight ? 0.5 : 0} />
+                 </mesh>
+                 <mesh geometry={new THREE.TorusGeometry(0.6, 0.05, 16, 32)} position={[0, 1.6, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                    <meshStandardMaterial color={baseColor} emissive={baseColor} emissiveIntensity={isNight ? 0.5 : 0} />
+                 </mesh>
+               </>
+             )
           case BuildingType.Road:
              return null;
           default:
@@ -998,6 +1022,24 @@ const Cursor = ({ x, y, color }: { x: number, y: number, color: string }) => {
   );
 };
 
+const HintIndicatorItem = ({ hint }: { hint: HintIndicator }) => {
+  const [wx, _, wz] = gridToWorld(hint.x, hint.y);
+  
+  return (
+    <Html position={[wx, 1.5, wz]} center pointerEvents="none">
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.5 }}
+        animate={{ opacity: 1, y: -40, scale: 1 }}
+        exit={{ opacity: 0, y: -80, scale: 0.8 }}
+        className="whitespace-nowrap px-2 py-0.5 rounded-full font-mono font-bold text-[10px] shadow-lg backdrop-blur-sm border border-white/20 select-none"
+        style={{ color: hint.color, backgroundColor: 'rgba(15, 23, 42, 0.4)' }}
+      >
+        {hint.text}
+      </motion.div>
+    </Html>
+  );
+};
+
 
 interface IsoMapProps {
   grid: Grid;
@@ -1005,10 +1047,11 @@ interface IsoMapProps {
   onHoverTile: (x: number, y: number) => void;
   hoveredTool: BuildingType;
   population: number;
-  weather: { isRaining: boolean, isFoggy: boolean, isSnowing: boolean };
+  weather: WeatherState;
+  hints: HintIndicator[];
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population, weather }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population, weather, hints }) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>(null);
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -1028,8 +1071,20 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
   
   const previewPos = hoveredTile ? gridToWorld(hoveredTile.x, hoveredTile.y) : [0,0,0];
 
+  const isNight = weather.cycle === 'night';
+  const isEvening = weather.cycle === 'evening';
+  const isMorning = weather.cycle === 'morning';
+
+  const ambientIntensity = isNight ? 0.2 : (weather.isRaining || weather.isSnowing ? 0.3 : 0.5);
+  const ambientColor = isNight ? "#1e293b" : (weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : (isEvening ? "#ffedd5" : "#cceeff")));
+  
+  const directionalIntensity = isNight ? 0.1 : (weather.isRaining || weather.isSnowing ? 1 : 2);
+  const directionalColor = isNight ? "#334155" : (weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : (isEvening ? "#fb923c" : "#fffbeb")));
+
   return (
-    <div className="absolute inset-0 bg-sky-900 touch-none">
+    <div className={`absolute inset-0 transition-colors duration-1000 touch-none ${
+      isNight ? 'bg-slate-950' : isEvening ? 'bg-orange-900/40' : isMorning ? 'bg-sky-800' : 'bg-sky-900'
+    }`}>
       <Canvas shadows dpr={[1, 1.5]} gl={{ antialias: true }}>
         <OrthographicCamera makeDefault zoom={45} position={[20, 20, 20]} near={-100} far={200} />
         
@@ -1043,21 +1098,33 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
           target={[0,-0.5,0]}
         />
 
-        <ambientLight intensity={weather.isRaining || weather.isSnowing ? 0.3 : 0.5} color={weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : "#cceeff")} />
+        <ambientLight intensity={ambientIntensity} color={ambientColor} />
         <directionalLight
           castShadow
-          position={[15, 20, 10]}
-          intensity={weather.isRaining || weather.isSnowing ? 1 : 2}
-          color={weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : "#fffbeb")}
+          position={isEvening ? [15, 5, 10] : [15, 20, 10]}
+          intensity={directionalIntensity}
+          color={directionalColor}
           shadow-mapSize={[2048, 2048]}
           shadow-camera-left={-15} shadow-camera-right={15}
           shadow-camera-top={15} shadow-camera-bottom={-15}
         >
         </directionalLight>
-        {(weather.isFoggy || weather.isSnowing) && <fog attach="fog" args={[weather.isSnowing ? '#f8fafc' : '#475569', 10, 60]} />}
-        <Environment preset={weather.isRaining ? "night" : (weather.isSnowing ? "apartment" : "city")} />
+        {(weather.isFoggy || weather.isSnowing || isNight) && (
+            <fog attach="fog" args={[
+                isNight ? '#020617' : (weather.isSnowing ? '#f8fafc' : '#475569'), 
+                10, 
+                80
+            ]} />
+        )}
+        <Environment preset={isNight ? "night" : (weather.isRaining ? "night" : (weather.isSnowing ? "apartment" : (isEvening ? "sunset" : "city")))} />
 
         <EnvironmentEffects isRaining={weather.isRaining} isSnowing={weather.isSnowing} />
+
+        <AnimatePresence>
+          {hints.map(hint => (
+            <HintIndicatorItem key={hint.id} hint={hint} />
+          ))}
+        </AnimatePresence>
 
         <group>
           {grid.map((row, y) =>
@@ -1084,6 +1151,7 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
                         baseColor={BUILDINGS[tile.buildingType].color} 
                         x={x} y={y} 
                         level={tile.level}
+                        isNight={isNight}
                       />
                     )}
                 </group>

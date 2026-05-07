@@ -18,6 +18,7 @@ import {
   Map as RoadIcon, 
   Home, 
   Trophy,
+  Landmark,
   Info,
   ChevronUp,
   ChevronDown,
@@ -25,12 +26,16 @@ import {
   CloudRain,
   CloudFog,
   Snowflake,
+  Smile,
+  Percent,
   Maximize,
   Minimize
 } from 'lucide-react';
 
 interface UIOverlayProps {
   stats: CityStats;
+  taxRate: number;
+  onTaxChange: (rate: number) => void;
   selectedTool: BuildingType;
   onSelectTool: (type: BuildingType) => void;
   currentGoal: AIGoal | null;
@@ -50,10 +55,13 @@ const tools = [
   { type: BuildingType.Commercial, icon: Store, color: 'text-blue-300' },
   { type: BuildingType.Industrial, icon: Factory, color: 'text-yellow-400' },
   { type: BuildingType.Park, icon: TreePine, color: 'text-emerald-400' },
+  { type: BuildingType.Monument, icon: Landmark, color: 'text-purple-400' },
 ];
 
 const UIOverlay: React.FC<UIOverlayProps> = ({
   stats,
+  taxRate,
+  onTaxChange,
   selectedTool,
   onSelectTool,
   currentGoal,
@@ -222,21 +230,69 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
         </div>
         <div className="w-px h-4 bg-white/10" />
         <div className="flex items-center gap-2">
+          <Smile className={`w-4 h-4 ${stats.happiness > 70 ? 'text-emerald-400' : stats.happiness > 40 ? 'text-yellow-400' : 'text-rose-400'}`} />
+          <span className="font-mono font-bold text-white tracking-tight">{Math.round(stats.happiness)}%</span>
+        </div>
+        <div className="w-px h-4 bg-white/10" />
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="font-mono font-bold text-white text-[10px] tracking-tight">LVL {stats.cityLevel}</span>
+          </div>
+          <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+             <motion.div 
+               animate={{ width: `${(stats.experience / (stats.cityLevel * 500)) * 100}%` }}
+               className="h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" 
+             />
+          </div>
+        </div>
+        <div className="w-px h-4 bg-white/10" />
+        <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-slate-400" />
           <span className="font-mono font-bold text-white tracking-tight">Day {stats.day}</span>
         </div>
       </motion.div>
 
-      {/* Advisor & Fullscreen - Top Right Float */}
+      {/* Advisor, Fullscreen & Tax - Top Right Float */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-3 w-64 md:w-80 pointer-events-auto">
-        {/* Fullscreen Toggle */}
-        <button 
-          onClick={toggleFullscreen}
-          className="p-2.5 bg-slate-950/40 backdrop-blur-md rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-all shadow-xl"
-          title="Toggle Fullscreen"
-        >
-          {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Tax Control */}
+          <div className="group relative">
+            <button 
+              className="p-2.5 bg-slate-950/40 backdrop-blur-md rounded-xl border border-white/10 text-slate-400 hover:text-white transition-all shadow-xl flex items-center gap-2"
+            >
+              <Percent className="w-4 h-4" />
+              <span className="text-[10px] font-bold">{taxRate}%</span>
+            </button>
+            
+            <div className="absolute right-0 top-12 opacity-0 group-hover:opacity-100 transition-opacity p-3 bg-slate-950/90 backdrop-blur-md rounded-xl border border-white/10 shadow-2xl min-w-[150px] z-50">
+               <div className="flex justify-between items-center mb-2">
+                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tax Rate</span>
+                 <span className="text-xs font-mono text-white">{taxRate}%</span>
+               </div>
+               <input 
+                 type="range" 
+                 min="1" 
+                 max="25" 
+                 value={taxRate} 
+                 onChange={(e) => onTaxChange(parseInt(e.target.value))}
+                 className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+               />
+               <div className="mt-2 text-[8px] text-slate-500 italic">
+                 High taxes decrease city happiness but increase revenue.
+               </div>
+            </div>
+          </div>
+
+          {/* Fullscreen Toggle */}
+          <button 
+            onClick={toggleFullscreen}
+            className="p-2.5 bg-slate-950/40 backdrop-blur-md rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-all shadow-xl"
+            title="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </button>
+        </div>
 
         <AnimatePresence mode="wait">
           {aiEnabled && (

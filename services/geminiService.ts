@@ -6,9 +6,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AIGoal, BuildingType, CityStats, Grid, NewsItem } from "../types";
 import { BUILDINGS } from "../constants";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const modelId = 'gemini-2.5-flash';
+const modelId = 'gemini-3-flash-preview';
 
 // --- Goal Generation ---
 
@@ -31,7 +31,7 @@ const goalSchema = {
     },
     buildingType: {
       type: Type.STRING,
-      enum: [BuildingType.Residential, BuildingType.Commercial, BuildingType.Industrial, BuildingType.Park, BuildingType.Road],
+      enum: [BuildingType.Residential, BuildingType.Commercial, BuildingType.Industrial, BuildingType.Park, BuildingType.Road, BuildingType.Monument],
       description: "Required if targetType is building_count.",
     },
     reward: {

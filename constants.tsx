@@ -66,4 +66,13 @@ export const BUILDINGS: Record<BuildingType, BuildingConfig> = {
     popGen: 1,
     incomeGen: 0,
   },
+  [BuildingType.Monument]: {
+    type: BuildingType.Monument,
+    cost: 5000,
+    name: 'Monument',
+    description: 'Immense status.',
+    color: '#a855f7', // purple-500
+    popGen: 0,
+    incomeGen: 0,
+  },
 };

@@ -9,6 +9,7 @@ export enum BuildingType {
   Commercial = 'Commercial',
   Industrial = 'Industrial',
   Park = 'Park',
+  Monument = 'Monument',
 }
 
 export interface BuildingConfig {
@@ -32,16 +33,29 @@ export interface TileData {
 
 export type Grid = TileData[][];
 
+export interface HintIndicator {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  type?: 'positive' | 'negative' | 'neutral';
+}
+
 export interface CityStats {
   money: number;
   population: number;
   day: number;
+  happiness: number; // 0-100
+  cityLevel: number;
+  experience: number; // For progression
 }
 
 export interface WeatherState {
   isRaining: boolean;
   isFoggy: boolean;
   isSnowing: boolean;
+  cycle: 'morning' | 'noon' | 'evening' | 'night';
 }
 
 export interface AIGoal {
