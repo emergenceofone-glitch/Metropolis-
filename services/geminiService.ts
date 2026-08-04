@@ -131,3 +131,64 @@ export const generateNewsEvent = async (stats: CityStats, recentAction: string |
   }
   return null;
 };
+
+// --- Tri-Node Ambient Payload & Narrative Directive Generator ---
+
+const directiveSchema = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING, description: "Actionable municipal governance directive title." },
+    objective: { type: Type.STRING, description: "Detailed directive objective for Sky Metropolis." },
+    sourceDistrict: { type: Type.STRING, enum: ['DIST-PS', 'DIST-RD', 'DIST-OT'] },
+    treasuryReward: { type: Type.INTEGER, description: "Monetary bonus for completion." },
+    rewardYieldMultiplier: { type: Type.NUMBER, description: "Yield multiplier boost between 1.15 and 1.80." },
+    ambientSourceVersion: { type: Type.STRING, description: "Payload tag (e.g. v1.0-ambient-source)." }
+  },
+  required: ['title', 'objective', 'sourceDistrict', 'treasuryReward', 'rewardYieldMultiplier', 'ambientSourceVersion']
+};
+
+export const generateArcadeNarrativePayload = async (
+  stats: CityStats,
+  triNodeState: import('../types').TriNodeState
+): Promise<import('../types').EcosystemDirective | null> => {
+  const context = `
+    Tri-Node Ecosystem Context:
+    Re-Ality Physical Pulses Ingested: ${triNodeState.physicalPulsesCount}
+    Last Telemetry: ${triNodeState.lastPulse?.telemetryData || 'None'}
+    Arcade City 40Hz Master Pulse: ${triNodeState.homeostasis.masterPulseHz}Hz
+    Homeostasis Stage: Stage ${triNodeState.homeostasis.stage} (${triNodeState.homeostasis.stageName})
+    District Coherence: PS=${triNodeState.homeostasis.districtCoherence['DIST-PS']}%, RD=${triNodeState.homeostasis.districtCoherence['DIST-RD']}%, OT=${triNodeState.homeostasis.districtCoherence['DIST-OT']}%
+    Sky Metropolis Population: ${stats.population}, Treasury: $${stats.money}
+  `;
+
+  const prompt = `You are the Aetherium Arcade City Gemini Narrative Engine broadcasting v1.0-ambient-source governance payloads. Generate a high-priority Ecosystem Directive for Sky Metropolis based on district coherence and physical pulse telemetry.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: `${context}\n${prompt}`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: directiveSchema,
+        temperature: 0.95,
+      },
+    });
+
+    if (response.text) {
+      const data = JSON.parse(response.text);
+      return {
+        id: `directive-${Date.now()}`,
+        sourceDistrict: data.sourceDistrict || 'DIST-PS',
+        title: data.title,
+        objective: data.objective,
+        treasuryReward: data.treasuryReward || 3000,
+        rewardYieldMultiplier: data.rewardYieldMultiplier || 1.4,
+        active: true,
+        ambientSourceVersion: data.ambientSourceVersion || 'v1.0-ambient-source'
+      };
+    }
+  } catch (error) {
+    console.error("Error generating Arcade narrative payload:", error);
+  }
+  return null;
+};

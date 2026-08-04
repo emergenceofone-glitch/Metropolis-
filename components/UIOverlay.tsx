@@ -29,8 +29,16 @@ import {
   Smile,
   Percent,
   Maximize,
-  Minimize
+  Minimize,
+  Sparkles,
+  Radio,
+  Zap,
+  Activity,
+  BookOpen
 } from 'lucide-react';
+import { TriNodeHUD } from './TriNodeHUD';
+import { CityChronicle } from './CityChronicle';
+import { TriNodeState, PhysicalPulse, ChronicleEntry } from '../types';
 
 interface UIOverlayProps {
   stats: CityStats;
@@ -46,6 +54,15 @@ interface UIOverlayProps {
   hoveredTile: TileData | null;
   weather: { isRaining: boolean, isFoggy: boolean, isSnowing: boolean };
   onToggleWeather: (weather: { isRaining?: boolean, isFoggy?: boolean, isSnowing?: boolean }) => void;
+  optimalSpot?: { x: number; y: number; score: number; explanation: string } | null;
+  onAutoplace?: () => void;
+  triNodeState?: TriNodeState;
+  onTriggerPulse?: (type: PhysicalPulse['type']) => void;
+  onGenerateDirective?: () => void;
+  onCompleteDirective?: (id: string, treasuryReward: number) => void;
+  isGeneratingDirective?: boolean;
+  chronicleEntries?: ChronicleEntry[];
+  onAddCustomChronicleNote?: (title: string, description: string) => void;
 }
 
 const tools = [
@@ -71,13 +88,24 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
   aiEnabled,
   hoveredTile,
   weather,
-  onToggleWeather
+  onToggleWeather,
+  optimalSpot,
+  onAutoplace,
+  triNodeState,
+  onTriggerPulse,
+  onGenerateDirective,
+  onCompleteDirective,
+  isGeneratingDirective,
+  chronicleEntries = [],
+  onAddCustomChronicleNote
 }) => {
   const [isGoalExpanded, setIsGoalExpanded] = useState(true);
   const latestNews = newsFeed.length > 0 ? newsFeed[newsFeed.length - 1] : null;
 
   const [isBuildingPanelExpanded, setIsBuildingPanelExpanded] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isTriNodeOpen, setIsTriNodeOpen] = useState(false);
+  const [isChronicleOpen, setIsChronicleOpen] = useState(false);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -251,6 +279,26 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
           <Calendar className="w-4 h-4 text-slate-400" />
           <span className="font-mono font-bold text-white tracking-tight">Day {stats.day}</span>
         </div>
+        <div className="w-px h-4 bg-white/10" />
+        <button
+          onClick={() => setIsChronicleOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 rounded-full text-amber-300 transition-all font-mono text-[10px] font-bold cursor-pointer shadow-md shadow-amber-500/10"
+        >
+          <BookOpen className="w-3 h-3 text-amber-400" />
+          <span>CHRONICLE ({chronicleEntries.length})</span>
+        </button>
+        {triNodeState && (
+          <>
+            <div className="w-px h-4 bg-white/10" />
+            <button
+              onClick={() => setIsTriNodeOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 rounded-full text-cyan-300 transition-all font-mono text-[10px] font-bold cursor-pointer shadow-md shadow-cyan-500/10"
+            >
+              <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
+              <span>TRI-NODE ({triNodeState.ecosystemMultiplier}x)</span>
+            </button>
+          </>
+        )}
       </motion.div>
 
       {/* Advisor, Fullscreen & Tax - Top Right Float */}
@@ -404,6 +452,43 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
 
       {/* The Dock - Bottom Center */}
       <div className="mt-auto pointer-events-auto flex flex-col items-center gap-3 pb-4 lg:pb-8">
+        <AnimatePresence mode="wait">
+          {selectedTool !== BuildingType.None && (
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 15 }}
+              className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-slate-950/75 backdrop-blur-md border border-amber-500/30 shadow-[0_10px_30px_rgba(245,158,11,0.15)] max-w-xs md:max-w-md text-center"
+            >
+              <div className="flex flex-col gap-0.5 animate-fade-in">
+                <span className="text-[9px] font-extrabold text-amber-400 uppercase tracking-widest flex items-center justify-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  Optimal Placement Advisory
+                </span>
+                {optimalSpot ? (
+                  <span className="text-[10px] text-slate-300 font-medium leading-tight">
+                    "{optimalSpot.explanation}"
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-rose-300 font-medium leading-tight">
+                    Grid is full or no vacant locations match.
+                  </span>
+                )}
+              </div>
+              
+              {optimalSpot && (
+                <button
+                  onClick={onAutoplace}
+                  className="px-4 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 transition-all text-[10px] font-bold text-slate-950 rounded-xl flex items-center gap-1.5 shadow-lg shadow-amber-500/10 border border-amber-300/20 cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Auto-Place {BUILDINGS[selectedTool].name} (${BUILDINGS[selectedTool].cost})
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div 
           initial={{ y: 100 }}
           animate={{ y: 0 }}
@@ -451,6 +536,34 @@ const UIOverlay: React.FC<UIOverlayProps> = ({
       <div className="absolute bottom-1 right-2 text-[8px] text-white/20 font-mono tracking-tighter">
         @SKY_METROPOLIS_V2
       </div>
+
+      {/* Tri-Node Multi-Tier Ecosystem HUD Panel */}
+      <AnimatePresence>
+        {isTriNodeOpen && triNodeState && onTriggerPulse && onGenerateDirective && onCompleteDirective && (
+          <TriNodeHUD
+            triNodeState={triNodeState}
+            onTriggerPulse={onTriggerPulse}
+            onGenerateDirective={onGenerateDirective}
+            onCompleteDirective={onCompleteDirective}
+            isGeneratingDirective={!!isGeneratingDirective}
+            onClose={() => setIsTriNodeOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* City Chronicle Modal */}
+      <AnimatePresence>
+        {isChronicleOpen && (
+          <CityChronicle
+            chronicleEntries={chronicleEntries}
+            currentDay={stats.day}
+            population={stats.population}
+            cityLevel={stats.cityLevel}
+            onClose={() => setIsChronicleOpen(false)}
+            onAddCustomNote={onAddCustomChronicleNote}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

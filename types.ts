@@ -72,3 +72,62 @@ export interface NewsItem {
   text: string;
   type: 'positive' | 'negative' | 'neutral';
 }
+
+// --- Tri-Node Ecosystem Integration Types ---
+
+export type ArcadeDistrict = 'DIST-PS' | 'DIST-RD' | 'DIST-OT';
+
+export interface PhysicalPulse {
+  id: string;
+  timestamp: number;
+  type: 'pedal_stomp' | 'kick_trajectory' | 'friction_tuner' | 'observer_mint';
+  magnitude: number;
+  telemetryData: string;
+}
+
+export interface HomeostasisState {
+  stage: number; // 1-8
+  stageName: string;
+  masterPulseHz: number; // e.g. 40.0
+  homeostasisIndex: number; // 0 - 100%
+  districtCoherence: Record<ArcadeDistrict, number>;
+  activeAmbientPayload: string; // v1.0-ambient-source
+}
+
+export interface EcosystemDirective {
+  id: string;
+  sourceDistrict: ArcadeDistrict;
+  title: string;
+  objective: string;
+  rewardYieldMultiplier: number;
+  treasuryReward: number;
+  active: boolean;
+  ambientSourceVersion: string;
+}
+
+export interface TriNodeState {
+  reAlityConnected: boolean;
+  arcadeCityAttuned: boolean;
+  physicalPulsesCount: number;
+  lastPulse: PhysicalPulse | null;
+  homeostasis: HomeostasisState;
+  activeDirectives: EcosystemDirective[];
+  totalArcadeYield: number;
+  ecosystemMultiplier: number;
+}
+
+// --- City Chronicle Legacy Types ---
+
+export type ChronicleCategory = 'milestone' | 'goal' | 'disaster' | 'directive' | 'historical';
+
+export interface ChronicleEntry {
+  id: string;
+  day: number;
+  timestamp: number;
+  title: string;
+  description: string;
+  category: ChronicleCategory;
+  impact?: string;
+  location?: { x: number; y: number };
+}
+

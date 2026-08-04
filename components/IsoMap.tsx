@@ -10,6 +10,7 @@ import { MathUtils } from 'three';
 import { Grid, BuildingType, TileData, HintIndicator, WeatherState } from '../types';
 import { GRID_SIZE, BUILDINGS } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
+import { ChevronUp } from 'lucide-react';
 
 // Fix for TypeScript not recognizing R3F elements in JSX
 declare global {
@@ -33,6 +34,59 @@ const coneGeo = new THREE.ConeGeometry(1, 1, 4);
 const sphereGeo = new THREE.SphereGeometry(1, 8, 8);
 
 // --- 1. Advanced Procedural Buildings ---
+
+const RoofAccessories = ({ hash, color, level }: { hash: number, color: THREE.Color, level: number }) => {
+  const accessories = [];
+  const variant = Math.floor(hash * 100);
+  
+  // HVAC Units
+  if (variant % 3 === 0) {
+    accessories.push(
+      <mesh key="hvac" geometry={boxGeo} position={[0.1, 0.05, -0.1]} scale={[0.2, 0.1, 0.2]}>
+        <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.2} />
+      </mesh>
+    );
+  }
+  
+  // Satellite Dish
+  if (variant % 5 === 0) {
+    accessories.push(
+        <group key="sat" position={[-0.2, 0.05, 0.2]} rotation={[Math.PI/6, hash * Math.PI, 0]}>
+            <mesh geometry={cylinderGeo} scale={[0.15, 0.02, 0.15]} rotation={[Math.PI/2, 0, 0]}>
+                <meshStandardMaterial color="#cbd5e1" metalness={0.5} />
+            </mesh>
+            <mesh geometry={cylinderGeo} scale={[0.02, 0.2, 0.02]} position={[0,0.1,0]}>
+                <meshStandardMaterial color="#94a3b8" />
+            </mesh>
+        </group>
+    );
+  }
+
+  // Water Tower (for industrial or older residential)
+  if (variant % 7 === 0 && level > 1) {
+    accessories.push(
+        <group key="water" position={[0.2, 0.1, -0.2]}>
+            <mesh geometry={boxGeo} scale={[0.1, 0.2, 0.1]} position={[0, -0.1, 0]}>
+                <meshStandardMaterial color="#4b5563" />
+            </mesh>
+            <mesh geometry={cylinderGeo} scale={[0.2, 0.2, 0.2]}>
+                <meshStandardMaterial color="#94a3b8" metalness={0.6} />
+            </mesh>
+        </group>
+    );
+  }
+
+  // Antenna
+  if (variant % 4 === 0) {
+    accessories.push(
+        <mesh key="ant" geometry={cylinderGeo} position={[0, 0.2, 0]} scale={[0.01, 0.5, 0.01]}>
+            <meshStandardMaterial color="#334155" />
+        </mesh>
+    );
+  }
+
+  return <group>{accessories}</group>;
+};
 
 // FIX: Wrap component in React.memo to ensure TypeScript recognizes it as a component that accepts a 'key' prop.
 const WindowBlock = React.memo(({ position, scale }: { position: [number, number, number], scale: [number, number, number] }) => (
@@ -194,7 +248,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
       {(() => {
         switch (type) {
           case BuildingType.Residential:
-            if (variant < 12) {
+            if (variant < 10) {
               // Cozy Cottage
               return (
                 <>
@@ -205,16 +259,17 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.1, 0.32]} scale={[0.15, 0.2, 0.05]} />
                 </>
               );
-            } else if (variant < 25) {
+            } else if (variant < 20) {
               // Modern Boxy
               return (
                 <>
                   <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[-0.1, 0.35, 0]} scale={[0.6, 0.7, 0.8]} />
                   <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0.25, 0.25, 0.1]} scale={[0.4, 0.5, 0.6]} />
                   <WindowBlock position={[-0.1, 0.5, 0.41]} scale={[0.4, 0.2, 0.05]} />
+                  <group position={[-0.1, 0.7, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
               );
-            } else if (variant < 37) {
+            } else if (variant < 30) {
               // Townhouse
               return (
                 <>
@@ -224,7 +279,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <WindowBlock position={[0, 0.3, 0.31]} scale={[0.3, 0.2, 0.05]} />
                 </>
               );
-            } else if (variant < 50) {
+            } else if (variant < 45) {
               // Apartment Block
               return (
                 <>
@@ -238,9 +293,10 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                       <WindowBlock position={[0.2, 0, -0.36]} scale={[0.2, 0.15, 0.05]} />
                     </group>
                   ))}
+                  <group position={[0, 1.5, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
               );
-            } else if (variant < 62) {
+            } else if (variant < 60) {
               // Suburban Duplex
               return (
                 <>
@@ -265,7 +321,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <WindowBlock position={[0, 0.2, 0.46]} scale={[0.4, 0.15, 0.02]} />
                 </>
               );
-            } else if (variant < 87) {
+            } else if (variant < 85) {
               // Art Deco Condo
               return (
                 <>
@@ -274,6 +330,21 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 1.45, 0]} scale={[0.2, 0.2, 0.2]} />
                   {[0.3, 0.6, 0.9].map(h => (
                     <WindowBlock key={h} position={[0, h, 0.3]} scale={[0.3, 0.1, 0.05]} />
+                  ))}
+                </>
+              );
+            } else if (variant < 93) {
+              // Classic Brick Apartment
+              const brickMat = new THREE.MeshStandardMaterial({ color: '#991b1b', roughness: 0.9 });
+              return (
+                <>
+                  <mesh {...commonProps} material={brickMat} geometry={boxGeo} position={[0, 0.75, 0]} scale={[0.75, 1.5, 0.75]} />
+                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 1.5, 0]} scale={[0.8, 0.1, 0.8]} />
+                  <SmokeStack position={[0.2, 1.5, 0.2]} />
+                  {[0.2, 0.5, 0.8, 1.1].map(h => (
+                    <group key={h} position={[0, h, 0]}>
+                      <WindowBlock position={[0, 0, 0.38]} scale={[0.4, 0.15, 0.02]} />
+                    </group>
                   ))}
                 </>
               );
@@ -286,12 +357,13 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                     <WindowBlock key={i} position={[0, 0.2 + i * 0.22, 0.26]} scale={[0.3, 0.1, 0.02]} />
                   ))}
                   <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 2.05, 0]} scale={[0.55, 0.1, 0.55]} />
+                  <group position={[0, 2.1, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
               );
             }
 
           case BuildingType.Commercial:
-            if (variant < 12) {
+            if (variant < 15) {
               // High-rise
               const height = 1.5 + hash * 1.5;
               return (
@@ -300,10 +372,11 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   {Array.from({ length: Math.floor(height * 4) }).map((_, i) => (
                     <WindowBlock key={i} position={[0, 0.2 + i * 0.25, 0]} scale={[0.72, 0.12, 0.72]} />
                   ))}
-                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, height + 0.1, 0]} scale={[0.5, 0.2, 0.5]} />
+                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, height + 0.05, 0]} scale={[0.5, 0.1, 0.5]} />
+                  <group position={[0, height + 0.1, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
               );
-            } else if (variant < 25) {
+            } else if (variant < 30) {
               // Shop
               return (
                 <>
@@ -312,7 +385,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({ color: hash > 0.5 ? '#ef4444' : '#3b82f6' })} geometry={boxGeo} position={[0, 0.55, 0.5]} scale={[0.9, 0.1, 0.2]} rotation={[Math.PI/6, 0, 0]} />
                 </>
               );
-            } else if (variant < 37) {
+            } else if (variant < 45) {
               // Corner store
                return (
                 <>
@@ -322,26 +395,16 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#9ca3af'})} geometry={boxGeo} position={[0.2, 0.65, 0.2]} scale={[0.2, 0.1, 0.2]} />
                 </>
                )
-            } else if (variant < 50) {
-               // Shopping Mall
-               return (
-                <>
-                  <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.25, 0]} scale={[0.95, 0.5, 0.95]} />
-                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.6, 0]} scale={[0.6, 0.2, 0.6]} />
-                  <WindowBlock position={[0, 0.25, 0.48]} scale={[0.8, 0.2, 0.05]} />
-                  <WindowBlock position={[0.48, 0.25, 0]} scale={[0.05, 0.2, 0.8]} />
-                </>
-               )
-            } else if (variant < 62) {
-               // Modern Glass Office
-               return (
-                <>
-                  <mesh {...commonProps} material={new THREE.MeshStandardMaterial({ color: '#94a3b8', metalness: 0.9, roughness: 0.1 })} geometry={boxGeo} position={[0, 0.6, 0]} scale={[0.7, 1.2, 0.7]} />
-                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.05, 0]} scale={[0.8, 0.1, 0.8]} />
-                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 1.25, 0]} scale={[0.4, 0.1, 0.4]} />
-                  <WindowBlock position={[0, 0.6, 0]} scale={[0.72, 1, 0.72]} />
-                </>
-               )
+            } else if (variant < 60) {
+              // Modern Glass Office
+              return (
+               <>
+                 <mesh {...commonProps} material={new THREE.MeshStandardMaterial({ color: '#94a3b8', metalness: 0.9, roughness: 0.1 })} geometry={boxGeo} position={[0, 0.6, 0]} scale={[0.7, 1.2, 0.7]} />
+                 <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.05, 0]} scale={[0.8, 0.1, 0.8]} />
+                 <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 1.25, 0]} scale={[0.4, 0.1, 0.4]} />
+                 <WindowBlock position={[0, 0.6, 0]} scale={[0.72, 1, 0.72]} />
+               </>
+              )
             } else if (variant < 75) {
                // Circular Office Plaza
                return (
@@ -350,9 +413,10 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 0.05, 0]} scale={[0.9, 0.1, 0.9]} />
                   <WindowBlock position={[0, 0.5, 0.4]} scale={[0.2, 0.8, 0.02]} />
                   <WindowBlock position={[0, 0.5, -0.4]} scale={[0.2, 0.8, 0.02]} />
+                  <group position={[0, 1, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
                )
-            } else if (variant < 87) {
+            } else if (variant < 88) {
                // Luxury Hotel
                return (
                 <>
@@ -366,19 +430,19 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                 </>
                )
             } else {
-               // Cinema Complex
+               // Tech Campus
                return (
                 <>
-                  <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#1e293b'})} geometry={boxGeo} position={[0, 0.4, 0]} scale={[0.95, 0.8, 0.95]} />
-                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.1, 0.48]} scale={[0.5, 0.2, 0.05]} />
-                  <mesh material={new THREE.MeshStandardMaterial({color: '#f87171', emissive: '#dc2626', emissiveIntensity: 2})} geometry={boxGeo} position={[-0.3, 0.5, 0.49]} scale={[0.2, 0.3, 0.01]} />
-                  <mesh material={new THREE.MeshStandardMaterial({color: '#60a5fa', emissive: '#2563eb', emissiveIntensity: 2})} geometry={boxGeo} position={[0.3, 0.5, 0.49]} scale={[0.2, 0.3, 0.01]} />
+                  <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[-0.2, 0.3, -0.2]} scale={[0.5, 0.6, 0.5]} />
+                  <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0.2, 0.3, 0.2]} scale={[0.5, 0.6, 0.5]} />
+                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.15, 0]} scale={[0.4, 0.3, 0.4]} />
+                  <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#38bdf8', emissive: '#38bdf8', emissiveIntensity: 1})} geometry={boxGeo} position={[0, 0.6, 0]} scale={[1, 0.05, 1]} />
                 </>
                )
             }
 
           case BuildingType.Industrial:
-            if (variant < 12) {
+            if (variant < 10) {
               // Factory
               return (
                 <>
@@ -386,6 +450,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={roofMat} geometry={boxGeo} position={[-0.2, 0.9, 0]} scale={[0.4, 0.2, 0.8]} rotation={[0,0,Math.PI/4]} />
                   <mesh {...commonProps} material={roofMat} geometry={boxGeo} position={[0.2, 0.9, 0]} scale={[0.4, 0.2, 0.8]} rotation={[0,0,Math.PI/4]} />
                   <SmokeStack position={[0.3, 0.4, 0.3]} />
+                  <group position={[0, 0.8, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
               );
             } else if (variant < 25) {
@@ -398,7 +463,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#6b7280'})} geometry={boxGeo} position={[0.25, 0.7, 0]} scale={[0.05, 0.05, 0.5]} />
                 </>
               );
-            } else if (variant < 37) {
+            } else if (variant < 40) {
               // Oil Refinery Tanks
               return (
                 <>
@@ -406,10 +471,9 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0.25, 0.3, 0.25]} scale={[0.3, 0.6, 0.3]} />
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#4b5563'})} geometry={cylinderGeo} position={[0, 0.5, 0]} scale={[0.1, 1, 0.1]} />
                   <SmokeStack position={[0, 0.5, 0]} />
-                  <mesh material={new THREE.MeshStandardMaterial({color: '#374151'})} geometry={boxGeo} position={[0, 0.05, 0]} scale={[0.9, 0.1, 0.9]} />
                 </>
               )
-            } else if (variant < 50) {
+            } else if (variant < 55) {
                // Power Station
                return (
                 <>
@@ -420,36 +484,25 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#fbbf24', emissive: '#f59e0b', emissiveIntensity: 0.5})} geometry={sphereGeo} position={[0, 0.9, 0.2]} scale={0.1} />
                 </>
                )
-            } else if (variant < 62) {
-               // Logistics Hub
+            } else if (variant < 70) {
+               // Chemical Plant
                return (
                 <>
                   <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.3, 0]} scale={[0.9, 0.6, 0.6]} />
-                  <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 0.1, 0.35]} scale={[0.8, 0.2, 0.1]} />
-                  <mesh {...commonProps} material={roofMat} geometry={boxGeo} position={[0, 0.65, 0]} scale={[0.95, 0.1, 0.65]} />
-                  {[ -0.3, 0, 0.3 ].map(xPos => (
-                    <mesh key={xPos} material={new THREE.MeshStandardMaterial({color: '#334155'})} geometry={boxGeo} position={[xPos, 0.1, 0.41]} scale={[0.2, 0.2, 0.02]} />
-                  ))}
+                  <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0.3, 0.5, 0]} scale={[0.2, 1, 0.2]} />
+                  <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[-0.3, 0.4, 0]} scale={[0.15, 0.8, 0.15]} />
+                  <mesh geometry={new THREE.TorusGeometry(0.2, 0.05, 8, 16)} position={[0, 0.4, 0]} rotation={[Math.PI/2, 0, 0]}>
+                    <meshStandardMaterial color="#4b5563" />
+                  </mesh>
                 </>
                )
-            } else if (variant < 75) {
-               // Bio-Research Lab
-               return (
-                <>
-                  <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.3, 0]} scale={[0.8, 0.6, 0.8]} />
-                  <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#10b981', emissive: '#10b981', emissiveIntensity: 0.3})} geometry={sphereGeo} position={[0, 0.7, 0]} scale={[0.4, 0.3, 0.4]} />
-                  <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 0.1, 0]} scale={[0.9, 0.2, 0.9]} />
-                </>
-               )
-            } else if (variant < 87) {
+            } else if (variant < 85) {
                // Data Center
                return (
                 <>
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#1e293b'})} geometry={boxGeo} position={[0, 0.4, 0]} scale={[0.9, 0.8, 0.9]} />
-                  {[ -0.3, 0.3 ].map(x => (
-                    <mesh key={x} material={new THREE.MeshStandardMaterial({color: '#334155'})} geometry={cylinderGeo} position={[x, 0.85, 0]} scale={[0.1, 0.1, 0.8]} rotation={[Math.PI/2, 0, 0]} />
-                  ))}
                   <mesh material={new THREE.MeshStandardMaterial({color: '#38bdf8', emissive: '#38bdf8', emissiveIntensity: 1})} geometry={boxGeo} position={[0, 0.4, 0.46]} scale={[0.7, 0.6, 0.02]} />
+                  <group position={[0, 0.8, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
                )
             } else {
@@ -460,8 +513,6 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   {/* Crane */}
                   <mesh material={new THREE.MeshStandardMaterial({color: '#f59e0b'})} geometry={cylinderGeo} position={[0.3, 0.8, 0.3]} scale={[0.05, 1.6, 0.05]} />
                   <mesh material={new THREE.MeshStandardMaterial({color: '#f59e0b'})} geometry={boxGeo} position={[0.1, 1.6, 0.3]} scale={[0.8, 0.05, 0.1]} />
-                  <mesh material={new THREE.MeshStandardMaterial({color: '#4b5563'})} geometry={boxGeo} position={[-0.2, 1.5, 0.3]} scale={[0.1, 0.2, 0.1]} />
-                  <mesh material={new THREE.MeshStandardMaterial({color: '#374151'})} geometry={boxGeo} position={[0, 0.01, 0]} scale={[1, 0.02, 1]} />
                 </>
                )
             }
@@ -484,6 +535,14 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                     </group>
                 )}
 
+                {variant >= 30 && variant < 50 && (
+                    <group position={[0,0.05,0]}>
+                        <mesh material={new THREE.MeshStandardMaterial({color: '#fde68a'})} geometry={boxGeo} scale={[0.5, 0.05, 0.5]} castShadow receiveShadow />
+                        <mesh material={new THREE.MeshStandardMaterial({color: '#ef4444'})} geometry={boxGeo} position={[0.2, 0.1, 0.2]} scale={[0.1, 0.2, 0.1]} />
+                        <mesh material={new THREE.MeshStandardMaterial({color: '#3b82f6'})} geometry={boxGeo} position={[-0.2, 0.2, -0.2]} scale={[0.1, 0.4, 0.1]} />
+                    </group>
+                )}
+
                 {Array.from({length: treeCount}).map((_, i) => {
                     const pos = positions[i % positions.length];
                     const scale = 0.5 + getHash(x+i, y-i) * 0.5;
@@ -499,23 +558,48 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
               </group>
             );
           case BuildingType.Monument:
-             return (
-               <>
-                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.1, 0]} scale={[1, 0.2, 1]} />
-                 <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 1.2, 0]} scale={[0.4, 2.4, 0.4]} />
-                 <mesh {...commonProps} material={new THREE.MeshStandardMaterial({ color: '#facc15', emissive: '#facc15', emissiveIntensity: 1 })} geometry={sphereGeo} position={[0, 2.5, 0]} scale={0.3} />
-                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.6, 0]} scale={[0.6, 0.1, 0.6]} />
-                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 1.2, 0]} scale={[0.7, 0.1, 0.7]} />
-                 <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 1.8, 0]} scale={[0.6, 0.1, 0.6]} />
-                 {/* Decorative rings */}
-                 <mesh geometry={new THREE.TorusGeometry(0.8, 0.05, 16, 32)} position={[0, 0.8, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                    <meshStandardMaterial color={baseColor} emissive={baseColor} emissiveIntensity={isNight ? 0.5 : 0} />
-                 </mesh>
-                 <mesh geometry={new THREE.TorusGeometry(0.6, 0.05, 16, 32)} position={[0, 1.6, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                    <meshStandardMaterial color={baseColor} emissive={baseColor} emissiveIntensity={isNight ? 0.5 : 0} />
-                 </mesh>
-               </>
-             )
+             if (variant < 33) {
+                // The Spire (Original)
+                return (
+                  <>
+                    <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.1, 0]} scale={[1, 0.2, 1]} />
+                    <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 1.2, 0]} scale={[0.4, 2.4, 0.4]} />
+                    <mesh {...commonProps} material={new THREE.MeshStandardMaterial({ color: '#facc15', emissive: '#facc15', emissiveIntensity: 1 })} geometry={sphereGeo} position={[0, 2.5, 0]} scale={0.3} />
+                    <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.6, 0]} scale={[0.6, 0.1, 0.6]} />
+                    <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 1.2, 0]} scale={[0.7, 0.1, 0.7]} />
+                    <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 1.8, 0]} scale={[0.6, 0.1, 0.6]} />
+                    <mesh geometry={new THREE.TorusGeometry(0.8, 0.05, 16, 32)} position={[0, 0.8, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                       <meshStandardMaterial color={baseColor} emissive={baseColor} emissiveIntensity={isNight ? 0.5 : 0} />
+                    </mesh>
+                    <mesh geometry={new THREE.TorusGeometry(0.6, 0.05, 16, 32)} position={[0, 1.6, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                       <meshStandardMaterial color={baseColor} emissive={baseColor} emissiveIntensity={isNight ? 0.5 : 0} />
+                    </mesh>
+                  </>
+                )
+             } else if (variant < 66) {
+                // The Great Dome
+                return (
+                   <>
+                     <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.1, 0]} scale={[1, 0.2, 1]} />
+                     <mesh {...commonProps} material={accentMat} geometry={sphereGeo} position={[0, 0.3, 0]} scale={[0.8, 0.8, 0.8]} clipShadows />
+                     <mesh {...commonProps} material={roofMat} geometry={sphereGeo} position={[0, 0.8, 0]} scale={[0.6, 0.6, 0.6]} />
+                     <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#facc15'})} geometry={cylinderGeo} position={[0, 1.4, 0]} scale={[0.05, 0.8, 0.05]} />
+                     {Array.from({length: 8}).map((_, i) => (
+                        <mesh key={i} material={mainMat} geometry={boxGeo} position={[Math.cos(i*Math.PI/4)*0.6, 0.2, Math.sin(i*Math.PI/4)*0.6]} scale={[0.1, 0.4, 0.1]} />
+                     ))}
+                   </>
+                )
+             } else {
+                // Triumph Arch
+                return (
+                   <>
+                     <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[-0.35, 0.5, 0]} scale={[0.3, 1, 0.6]} />
+                     <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0.35, 0.5, 0]} scale={[0.3, 1, 0.6]} />
+                     <mesh {...commonProps} material={roofMat} geometry={boxGeo} position={[0, 1, 0]} scale={[1, 0.2, 0.7]} />
+                     <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0, 0.7, 0]} scale={[0.4, 0.1, 0.6]} rotation={[0,0,Math.PI/2]} />
+                   </>
+                )
+             }
           case BuildingType.Road:
              return null;
           default:
@@ -1040,6 +1124,96 @@ const HintIndicatorItem = ({ hint }: { hint: HintIndicator }) => {
   );
 };
 
+const BuildingTooltip = ({ x, y, tile, isNight }: { x: number, y: number, tile: TileData, isNight: boolean }) => {
+  const [wx, _, wz] = gridToWorld(x, y);
+  const config = BUILDINGS[tile.buildingType];
+  if (!config || tile.buildingType === BuildingType.None || tile.buildingType === BuildingType.Road) return null;
+
+  return (
+    <Html position={[wx, 1.2, wz]} center pointerEvents="none">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className={`px-3 py-2 rounded-xl backdrop-blur-md border border-white/10 shadow-2xl flex flex-col gap-0.5 min-w-[120px] select-none ${
+          isNight ? 'bg-slate-950/80' : 'bg-slate-900/60'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-[10px] font-bold text-white tracking-tight uppercase whitespace-nowrap">{config.name}</span>
+          <div className="flex items-center gap-1">
+             <div className="w-1 h-1 rounded-full bg-cyan-400" />
+             <span className="text-[8px] font-mono text-cyan-400">LVL {tile.level || 1}</span>
+          </div>
+        </div>
+        <div className="text-[8px] text-slate-300 font-medium">
+          {tile.buildingType} District
+        </div>
+      </motion.div>
+    </Html>
+  );
+};
+
+const UpgradeIndicator = ({ x, y }: { x: number, y: number }) => {
+  const [wx, _, wz] = gridToWorld(x, y);
+  
+  return (
+    <Html position={[wx, 2.5, wz]} center pointerEvents="none">
+      <motion.div
+        animate={{ 
+          y: [0, -4, 0],
+          opacity: [0.4, 1, 0.4]
+        }}
+        transition={{ 
+          duration: 2, 
+          repeat: Infinity,
+          ease: "easeInOut" 
+        }}
+        className="flex items-center justify-center p-1 bg-yellow-400/20 backdrop-blur-sm rounded-full border border-yellow-400/50 shadow-[0_0_10px_rgba(250,204,21,0.3)]"
+      >
+        <ChevronUp className="w-3 h-3 text-yellow-400" />
+      </motion.div>
+    </Html>
+  );
+};
+
+const OptimalSpotMarker = ({ x, y, isNight }: { x: number, y: number, isNight: boolean }) => {
+  const [wx, _, wz] = gridToWorld(x, y);
+  const ref = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y += 0.015;
+    }
+  });
+
+  return (
+    <group ref={ref} position={[wx, 0.05, wz]} raycast={() => null}>
+      <mesh rotation={[Math.PI / 4, 0, Math.PI / 4]} position={[0, 0.4, 0]}>
+        <octahedronGeometry args={[0.2, 0]} />
+        <meshStandardMaterial 
+          color="#fbbf24" 
+          emissive="#fbbf24" 
+          emissiveIntensity={1.5} 
+          metalness={0.9} 
+          roughness={0.1} 
+        />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.3, 0.5, 16]} />
+        <meshBasicMaterial color="#fbbf24" transparent opacity={0.6} side={THREE.DoubleSide} />
+      </mesh>
+      <Html position={[0, 0.9, 0]} center pointerEvents="none">
+        <motion.div
+          animate={{ scale: [1, 1.05, 1], opacity: [0.8, 1, 0.8] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+          className="bg-amber-500 text-amber-950 px-2 py-0.5 rounded-full font-sans font-extrabold text-[8px] tracking-wider uppercase whitespace-nowrap border border-amber-300 shadow-lg flex items-center gap-1 shadow-amber-500/20"
+        >
+          <span>★ OPTIMAL SPOT</span>
+        </motion.div>
+      </Html>
+    </group>
+  );
+};
 
 interface IsoMapProps {
   grid: Grid;
@@ -1049,9 +1223,11 @@ interface IsoMapProps {
   population: number;
   weather: WeatherState;
   hints: HintIndicator[];
+  money: number;
+  optimalSpot?: { x: number; y: number; score: number; explanation: string } | null;
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population, weather, hints }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population, weather, hints, money, optimalSpot }) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>(null);
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -1124,6 +1300,15 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
           {hints.map(hint => (
             <HintIndicatorItem key={hint.id} hint={hint} />
           ))}
+          {hoveredTile && grid[hoveredTile.y][hoveredTile.x].buildingType !== BuildingType.None && (
+            <BuildingTooltip 
+              key={`tooltip-${hoveredTile.x}-${hoveredTile.y}`}
+              x={hoveredTile.x} 
+              y={hoveredTile.y} 
+              tile={grid[hoveredTile.y][hoveredTile.x]} 
+              isNight={isNight}
+            />
+          )}
         </AnimatePresence>
 
         <group>
@@ -1154,6 +1339,15 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
                         isNight={isNight}
                       />
                     )}
+                    {(() => {
+                      if (tile.buildingType === BuildingType.None || tile.buildingType === BuildingType.Road) return null;
+                      const level = tile.level || 1;
+                      const upgradeCost = BUILDINGS[tile.buildingType].cost * (level + 1);
+                      if (level < 3 && money >= upgradeCost) {
+                        return <UpgradeIndicator x={x} y={y} />;
+                      }
+                      return null;
+                    })()}
                 </group>
               </React.Fragment>
             )})
@@ -1163,6 +1357,11 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
           <group raycast={() => null}>
             <TrafficSystem grid={grid} />
             <PopulationSystem population={population} grid={grid} />
+
+            {/* Optimal Placement assist target */}
+            {optimalSpot && (
+              <OptimalSpotMarker x={optimalSpot.x} y={optimalSpot.y} isNight={isNight} />
+            )}
 
             {/* Placement Preview */}
             {showPreview && hoveredTile && (

@@ -2,14 +2,38 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Grid, TileData, BuildingType, CityStats, AIGoal, NewsItem, HintIndicator, WeatherState } from './types';
 import { GRID_SIZE, BUILDINGS, TICK_RATE_MS, INITIAL_MONEY } from './constants';
 import IsoMap from './components/IsoMap';
 import UIOverlay from './components/UIOverlay';
 import StartScreen from './components/StartScreen';
-import { generateCityGoal, generateNewsEvent } from './services/geminiService';
+import { generateCityGoal, generateNewsEvent, generateArcadeNarrativePayload } from './services/geminiService';
 import { audioService } from './services/audioService';
+import { findOptimalPosition } from './utils/cityOptimizer';
+import { createInitialTriNodeState, processPhysicalPulse } from './services/triNodeEngine';
+import { TriNodeState, PhysicalPulse, ChronicleEntry } from './types';
+
+const INITIAL_CHRONICLE_ENTRIES: ChronicleEntry[] = [
+  {
+    id: 'chronicle-founding-01',
+    day: 1,
+    timestamp: Date.now() - 3600000,
+    title: 'SkyMetropolis City Charter Signed',
+    description: 'Municipal grounds surveyed and initial grid infrastructure commissioned under high-density zoning ordinances.',
+    category: 'historical',
+    impact: 'Charter Established'
+  },
+  {
+    id: 'chronicle-tri-01',
+    day: 1,
+    timestamp: Date.now() - 1800000,
+    title: 'Tri-Node Ecosystem Synchronization',
+    description: 'Aetherium Arcade City and Re-Ality Observer Physics Engine coupled with SkyMetropolis sandbox.',
+    category: 'directive',
+    impact: '40Hz Resonance Active'
+  }
+];
 
 // Initialize empty grid with island shape generation for 3D visual interest
 const createInitialGrid = (): Grid => {
@@ -54,21 +78,35 @@ function App() {
   const [currentGoal, setCurrentGoal] = useState<AIGoal | null>(null);
   const [isGeneratingGoal, setIsGeneratingGoal] = useState(false);
   const [newsFeed, setNewsFeed] = useState<NewsItem[]>([]);
+
+  // --- Tri-Node Ecosystem Integration State ---
+  const [triNodeState, setTriNodeState] = useState<TriNodeState>(createInitialTriNodeState);
+  const [isGeneratingDirective, setIsGeneratingDirective] = useState(false);
+
+  // --- City Chronicle State & History ---
+  const [chronicleEntries, setChronicleEntries] = useState<ChronicleEntry[]>(INITIAL_CHRONICLE_ENTRIES);
+  const popMilestonesReached = useRef<Set<number>>(new Set());
+
+  // --- Optimization State ---
+  const optimalSpot = useMemo(() => {
+    return findOptimalPosition(grid, selectedTool);
+  }, [grid, selectedTool]);
   
   // Refs for accessing state inside intervals without dependencies
   const gridRef = useRef(grid);
   const statsRef = useRef(stats);
   const goalRef = useRef(currentGoal);
   const aiEnabledRef = useRef(aiEnabled);
+  const triNodeRef = useRef(triNodeState);
 
   // Sync refs
   useEffect(() => { gridRef.current = grid; }, [grid]);
   useEffect(() => { statsRef.current = stats; }, [stats]);
   useEffect(() => { goalRef.current = currentGoal; }, [currentGoal]);
   useEffect(() => { aiEnabledRef.current = aiEnabled; }, [aiEnabled]);
+  useEffect(() => { triNodeRef.current = triNodeState; }, [triNodeState]);
 
-  // --- AI Logic Wrappers ---
-
+  // --- Core Utility Callbacks ---
   const addNewsItem = useCallback((item: NewsItem) => {
     setNewsFeed(prev => [...prev.slice(-12), item]); // Keep last few
   }, []);
@@ -80,6 +118,91 @@ function App() {
       setHints(prev => prev.filter(h => h.id !== id));
     }, 2000); // 2 seconds lifecycle
   }, []);
+
+  // --- Chronicle Entry Helper ---
+  const addChronicleEntry = useCallback((entry: Omit<ChronicleEntry, 'id' | 'timestamp' | 'day'> & { day?: number }) => {
+    const newEntry: ChronicleEntry = {
+      id: `chronicle-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: Date.now(),
+      day: entry.day ?? statsRef.current.day,
+      ...entry
+    };
+    setChronicleEntries(prev => [newEntry, ...prev]);
+  }, []);
+
+  const handleAddCustomChronicleNote = useCallback((title: string, description: string) => {
+    addChronicleEntry({
+      title,
+      description,
+      category: 'historical',
+      impact: 'Archival Note'
+    });
+    setNewsFeed(prev => [...prev.slice(-12), {
+      id: Date.now().toString(),
+      text: `[City Chronicle Logged] ${title}`,
+      type: 'neutral'
+    }]);
+  }, [addChronicleEntry]);
+
+  // --- Tri-Node Ecosystem Handlers ---
+
+  const handleTriggerPulse = useCallback((type: PhysicalPulse['type']) => {
+    const { newState, pulse, message } = processPhysicalPulse(triNodeRef.current, type);
+    setTriNodeState(newState);
+    addNewsItem({
+      id: pulse.id,
+      text: `[Re-Ality Pulse Ingest] ${message}`,
+      type: 'positive'
+    });
+    audioService.playBuildSound();
+  }, [addNewsItem]);
+
+  const handleGenerateDirective = useCallback(async () => {
+    if (isGeneratingDirective) return;
+    setIsGeneratingDirective(true);
+    
+    const newDirective = await generateArcadeNarrativePayload(statsRef.current, triNodeRef.current);
+    if (newDirective) {
+      setTriNodeState(prev => ({
+        ...prev,
+        activeDirectives: [newDirective, ...prev.activeDirectives.slice(0, 3)]
+      }));
+      addNewsItem({
+        id: newDirective.id,
+        text: `[Arcade City Broadcast] New Ecosystem Directive: ${newDirective.title}`,
+        type: 'neutral'
+      });
+      audioService.playLevelUpSound();
+    }
+    setIsGeneratingDirective(false);
+  }, [isGeneratingDirective, addNewsItem]);
+
+  const handleCompleteDirective = useCallback((directiveId: string, treasuryReward: number) => {
+    const targetDirective = triNodeRef.current.activeDirectives.find(d => d.id === directiveId);
+    setStats(prev => ({ ...prev, money: prev.money + treasuryReward }));
+    setTriNodeState(prev => ({
+      ...prev,
+      totalArcadeYield: prev.totalArcadeYield + Math.floor(treasuryReward * 1.5),
+      activeDirectives: prev.activeDirectives.filter(d => d.id !== directiveId)
+    }));
+    addNewsItem({
+      id: Date.now().toString(),
+      text: `Directive Fulfilled! +$${treasuryReward} Treasury Grant claimed from Arcade City.`,
+      type: 'positive'
+    });
+    audioService.playRewardSound();
+
+    if (targetDirective) {
+      addChronicleEntry({
+        title: `Ecosystem Directive Fulfilled: ${targetDirective.title}`,
+        description: targetDirective.objective,
+        category: 'directive',
+        impact: `+$${treasuryReward.toLocaleString()} Grant`
+      });
+    }
+  }, [addNewsItem, addChronicleEntry]);
+
+  // --- AI Logic Wrappers ---
 
   const fetchNewGoal = useCallback(async () => {
     if (isGeneratingGoal || !aiEnabledRef.current) return;
@@ -170,8 +293,8 @@ function App() {
       // 3. Modifiers based on Happiness
       const happinessMultiplier = newHappiness / 100; // 0 to 1
       const effectivePopGrowth = totalBasePopGrowth * happinessMultiplier;
-      // Tax Income calc: (Base Income) * (Tax Rate / 10) * (Happiness Modifier)
-      const effectiveIncome = totalBaseIncome * (taxRate / 10) * (newHappiness / 75);
+      // Tax Income calc: (Base Income) * (Tax Rate / 10) * (Happiness Modifier) * (Tri-Node Ecosystem Multiplier)
+      const effectiveIncome = totalBaseIncome * (taxRate / 10) * (newHappiness / 75) * triNodeRef.current.ecosystemMultiplier;
 
       // Cap population growth by residential count
       const resCount = buildingCounts[BuildingType.Residential] || 0;
@@ -193,7 +316,29 @@ function App() {
            newLevel += 1;
            finalExperience = 0; // Reset for next level
            addNewsItem({id: Date.now().toString(), text: `City reached Level ${newLevel}! New opportunities await.`, type: 'positive'});
+           addChronicleEntry({
+             day: prev.day + 1,
+             title: `Civic Expansion: Reached Level ${newLevel}`,
+             description: `SkyMetropolis expanded civic status to Level ${newLevel}, unlocking higher tier urban developments.`,
+             category: 'milestone',
+             impact: `Level ${newLevel}`
+           });
         }
+
+        // Check Population Threshold Milestones
+        const popThresholds = [25, 50, 100, 250, 500, 1000, 2500, 5000];
+        popThresholds.forEach(t => {
+          if (newPop >= t && !popMilestonesReached.current.has(t)) {
+            popMilestonesReached.current.add(t);
+            addChronicleEntry({
+              day: prev.day + 1,
+              title: `Population Milestone: ${t.toLocaleString()} Citizens`,
+              description: `SkyMetropolis officially reached ${t.toLocaleString()} active residents living across residential sectors.`,
+              category: 'milestone',
+              impact: `${t.toLocaleString()} Citizens`
+            });
+          }
+        });
 
         const newStats = {
           money: prev.money + effectiveIncome,
@@ -216,6 +361,13 @@ function App() {
 
           if (isMet) {
             setCurrentGoal({ ...goal, completed: true });
+            addChronicleEntry({
+              day: newStats.day,
+              title: `Municipal Goal Met: ${goal.description}`,
+              description: `City Council goal fulfilled! Treasury reward grant of $${goal.reward.toLocaleString()} earned.`,
+              category: 'goal',
+              impact: `+$${goal.reward.toLocaleString()} Grant`
+            });
           }
         }
 
@@ -238,9 +390,41 @@ function App() {
 
         if (Math.random() < 0.05) {
            const rand = Math.random();
-           if (rand < 0.3) { isRaining = !isRaining; isSnowing = false; }
-           else if (rand < 0.6) { isSnowing = !isSnowing; isRaining = false; }
-           else { isFoggy = !isFoggy; }
+           if (rand < 0.3) { 
+             isRaining = !isRaining; 
+             isSnowing = false; 
+             if (isRaining && Math.random() < 0.3) {
+               addChronicleEntry({
+                 title: 'Monsoonal Heavy Rain Incident',
+                 description: 'Heavy precipitation tested municipal drainage networks across lower commercial and residential districts.',
+                 category: 'disaster',
+                 impact: 'Drainage Tested'
+               });
+             }
+           }
+           else if (rand < 0.6) { 
+             isSnowing = !isSnowing; 
+             isRaining = false; 
+             if (isSnowing && Math.random() < 0.3) {
+               addChronicleEntry({
+                 title: 'Sub-Zero Blizzard Front',
+                 description: 'Glacial atmospheric front swept across SkyMetropolis; power sub-stations operated at maximum capacity.',
+                 category: 'disaster',
+                 impact: 'Grid Weathered'
+               });
+             }
+           }
+           else { 
+             isFoggy = !isFoggy; 
+             if (isFoggy && Math.random() < 0.3) {
+               addChronicleEntry({
+                 title: 'Dense Fog Transport Disruption',
+                 description: 'Zero-visibility maritime fog bank rolled over high-density transit corridors.',
+                 category: 'disaster',
+                 impact: 'Low Visibility'
+               });
+             }
+           }
         }
 
         return { ...prev, cycle, isRaining, isSnowing, isFoggy };
@@ -345,6 +529,48 @@ function App() {
     }
   }, [selectedTool, addNewsItem, gameStarted]);
 
+  const handleAutoplace = useCallback(() => {
+    if (!gameStarted || selectedTool === BuildingType.None) return;
+
+    const currentGrid = gridRef.current;
+    const currentStats = statsRef.current;
+    const tool = selectedTool;
+    const buildingConfig = BUILDINGS[tool];
+
+    const spot = findOptimalPosition(currentGrid, tool);
+    if (!spot) {
+      addNewsItem({
+        id: Date.now().toString() + Math.random(),
+        text: `No optimal vacancies found for placing ${buildingConfig.name}.`,
+        type: 'neutral'
+      });
+      return;
+    }
+
+    if (currentStats.money >= buildingConfig.cost) {
+      setStats(prev => ({ ...prev, money: prev.money - buildingConfig.cost }));
+
+      const newGrid = currentGrid.map(row => [...row]);
+      newGrid[spot.y][spot.x] = { x: spot.x, y: spot.y, buildingType: tool, level: 1 };
+      setGrid(newGrid);
+
+      triggerHint(spot.x, spot.y, `Auto-Built!`, '#fbbf24');
+      audioService.playPlacement();
+
+      addNewsItem({
+        id: Date.now().toString() + Math.random(),
+        text: `Metropolitan planner auto-placed a ${buildingConfig.name} at (${spot.x + 1}, ${spot.y + 1}) for maximum performance: ${spot.explanation}.`,
+        type: 'positive'
+      });
+    } else {
+      addNewsItem({
+        id: Date.now().toString() + Math.random(),
+        text: `Treasury inadequate to auto-place ${buildingConfig.name} ($${buildingConfig.cost} needed).`,
+        type: 'negative'
+      });
+    }
+  }, [selectedTool, gameStarted, addNewsItem, triggerHint]);
+
   const handleClaimReward = () => {
     if (currentGoal && currentGoal.completed) {
       setStats(prev => ({ ...prev, money: prev.money + currentGoal.reward }));
@@ -369,6 +595,8 @@ function App() {
         population={stats.population}
         weather={weather}
         hints={hints}
+        money={stats.money}
+        optimalSpot={optimalSpot}
         onHoverTile={(x, y) => {
           if (x >= 0 && y >= 0) {
             setHoveredTileData(grid[y][x]);
@@ -399,6 +627,15 @@ function App() {
           hoveredTile={hoveredTileData}
           weather={weather}
           onToggleWeather={(w) => setWeather(prev => ({ ...prev, ...w }))}
+          optimalSpot={optimalSpot}
+          onAutoplace={handleAutoplace}
+          triNodeState={triNodeState}
+          onTriggerPulse={handleTriggerPulse}
+          onGenerateDirective={handleGenerateDirective}
+          onCompleteDirective={handleCompleteDirective}
+          isGeneratingDirective={isGeneratingDirective}
+          chronicleEntries={chronicleEntries}
+          onAddCustomChronicleNote={handleAddCustomChronicleNote}
         />
       )}
     </div>
