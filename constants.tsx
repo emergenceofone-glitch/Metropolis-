@@ -75,4 +75,13 @@ export const BUILDINGS: Record<BuildingType, BuildingConfig> = {
     popGen: 0,
     incomeGen: 0,
   },
+  [BuildingType.AtmosphericShield]: {
+    type: BuildingType.AtmosphericShield,
+    cost: 800,
+    name: 'Atmospheric Shield',
+    description: 'Shields nearby buildings (4-tile radius) from blizzards & monsoon weather penalties.',
+    color: '#06b6d4', // cyan-500
+    popGen: 0,
+    incomeGen: 0,
+  },
 };

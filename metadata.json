@@ -2,5 +2,5 @@
   "name": "Sky Metropolis",
   "description": "An atmospheric city management builder where you cultivate a thriving metropolis above the clouds, guided by AI objectives and dynamic weather effects.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

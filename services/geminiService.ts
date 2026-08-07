@@ -1,194 +1,211 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
-*/
-import { GoogleGenAI, Type } from "@google/genai";
-import { AIGoal, BuildingType, CityStats, Grid, NewsItem } from "../types";
+import { AIGoal, BuildingType, CityStats, Grid, NewsItem, MaterialRefinementState } from "../types";
 import { BUILDINGS } from "../constants";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// --- Procedural Fallbacks ---
 
-const modelId = 'gemini-3-flash-preview';
+const FALLBACK_NEWS_HEADLINES: { text: string; type: 'positive' | 'negative' | 'neutral' }[] = [
+  { text: "Market analysts report steady financial growth across the central district.", type: "positive" },
+  { text: "Local artisans host a vibrant cloud-side festival; civic happiness surges.", type: "positive" },
+  { text: "Aetherium collectors log record-high energy capture levels today.", type: "positive" },
+  { text: "City council approves new zoning incentives for incoming citizens.", type: "positive" },
+  { text: "Engineers complete routine maintenance on the sky platform stabilization grid.", type: "neutral" },
+  { text: "Minor traffic slowdowns reported along primary avenues; transit optimization suggested.", type: "neutral" },
+  { text: "Atmospheric weather sensors indicate clear skies and stable pressure ahead.", type: "neutral" },
+  { text: "Solar winds briefly fluctuate power output; backup generators engaged smoothly.", type: "neutral" },
+  { text: "Citizens request additional green spaces and parkland near residential sectors.", type: "neutral" },
+  { text: "High demand for commercial space as local economy expands.", type: "positive" }
+];
+
+function getFallbackNews(recentAction: string | null): NewsItem {
+  if (recentAction) {
+    return {
+      id: Date.now().toString() + Math.random(),
+      text: `Municipal Update: ${recentAction} executed successfully across the city grid.`,
+      type: 'positive'
+    };
+  }
+  const item = FALLBACK_NEWS_HEADLINES[Math.floor(Math.random() * FALLBACK_NEWS_HEADLINES.length)];
+  return {
+    id: Date.now().toString() + Math.random(),
+    text: item.text,
+    type: item.type
+  };
+}
+
+function getFallbackGoal(stats: CityStats, grid: Grid): AIGoal {
+  const counts: Record<string, number> = {};
+  grid.flat().forEach(tile => {
+    if (tile.buildingType !== BuildingType.None) {
+      counts[tile.buildingType] = (counts[tile.buildingType] || 0) + 1;
+    }
+  });
+
+  if (stats.population < 30) {
+    return {
+      description: "Expand the residential zone to welcome 30 citizens to Sky Metropolis.",
+      targetType: 'population',
+      targetValue: 30,
+      reward: 1200,
+      completed: false
+    };
+  }
+
+  if (stats.money < 2500) {
+    return {
+      description: "Boost municipal revenue to reach $2,500 in the city treasury.",
+      targetType: 'money',
+      targetValue: 2500,
+      reward: 1500,
+      completed: false
+    };
+  }
+
+  const resCount = counts[BuildingType.Residential] || 0;
+  const commCount = counts[BuildingType.Commercial] || 0;
+
+  if (commCount < Math.floor(resCount / 2)) {
+    return {
+      description: `Construct more commercial buildings to support local commerce (${commCount + 2} target).`,
+      targetType: 'building_count',
+      targetValue: commCount + 2,
+      buildingType: BuildingType.Commercial,
+      reward: 2000,
+      completed: false
+    };
+  }
+
+  return {
+    description: `Build additional residential structures to reach a target population of ${stats.population + 25}.`,
+    targetType: 'population',
+    targetValue: stats.population + 25,
+    reward: 1800,
+    completed: false
+  };
+}
+
+function getFallbackDirective(triNodeState: import('../types').TriNodeState): import('../types').EcosystemDirective {
+  const districts: ('DIST-PS' | 'DIST-RD' | 'DIST-OT')[] = ['DIST-PS', 'DIST-RD', 'DIST-OT'];
+  const sourceDistrict = districts[Math.floor(Math.random() * districts.length)];
+  
+  return {
+    id: `directive-${Date.now()}`,
+    sourceDistrict,
+    title: `Aetherium ${sourceDistrict} Grid Synchronization`,
+    objective: `Calibrate municipal grid systems in ${sourceDistrict} to stabilize physical pulses and maintain platform homeostasis.`,
+    treasuryReward: 3500,
+    rewardYieldMultiplier: 1.45,
+    active: true,
+    ambientSourceVersion: 'v1.0-ambient-procedural'
+  };
+}
 
 // --- Goal Generation ---
 
-// @google/genai-schema-fix: The `Schema` type is not exported from @google/genai. Use a const object for the schema.
-const goalSchema = {
-  type: Type.OBJECT,
-  properties: {
-    description: {
-      type: Type.STRING,
-      description: "A short, creative description of the goal from the perspective of city council or citizens.",
-    },
-    targetType: {
-      type: Type.STRING,
-      enum: ['population', 'money', 'building_count'],
-      description: "The metric to track.",
-    },
-    targetValue: {
-      type: Type.INTEGER,
-      description: "The target numeric value to reach.",
-    },
-    buildingType: {
-      type: Type.STRING,
-      enum: [BuildingType.Residential, BuildingType.Commercial, BuildingType.Industrial, BuildingType.Park, BuildingType.Road, BuildingType.Monument],
-      description: "Required if targetType is building_count.",
-    },
-    reward: {
-      type: Type.INTEGER,
-      description: "Monetary reward for completion.",
-    },
-  },
-  required: ['description', 'targetType', 'targetValue', 'reward'],
-};
-
 export const generateCityGoal = async (stats: CityStats, grid: Grid): Promise<AIGoal | null> => {
-  // @google/genai-api-key-fix: The API key must be obtained exclusively from the environment variable `process.env.API_KEY`. Do not add checks for its existence.
-
-  // Count buildings
   const counts: Record<string, number> = {};
   grid.flat().forEach(tile => {
     counts[tile.buildingType] = (counts[tile.buildingType] || 0) + 1;
   });
 
-  const context = `
-    Current City Stats:
-    Day: ${stats.day}
-    Money: $${stats.money}
-    Population: ${stats.population}
-    Buildings: ${JSON.stringify(counts)}
-    Building Costs/Stats: ${JSON.stringify(
-      Object.values(BUILDINGS).filter(b => b.type !== BuildingType.None).map(b => ({type: b.type, cost: b.cost, pop: b.popGen, income: b.incomeGen}))
-    )}
-  `;
-
-  const prompt = `You are the AI City Advisor for a simulation game. Based on the current city stats, generate a challenging but achievable short-term goal for the player to help the city grow. Return JSON.`;
+  const buildingStats = Object.values(BUILDINGS).filter(b => b.type !== BuildingType.None).map(b => ({
+    type: b.type,
+    cost: b.cost,
+    pop: b.popGen,
+    income: b.incomeGen
+  }));
 
   try {
-    const response = await ai.models.generateContent({
-      model: modelId,
-      // @google/genai-generate-content-fix: For text-only prompts, `contents` should be a single string.
-      contents: `${context}\n${prompt}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: goalSchema,
-        temperature: 0.7,
-      },
+    const response = await fetch("/api/gemini/goal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stats, counts, buildingStats })
     });
 
-    // @google/genai-response-text-fix: Access the `text` property directly from the response.
-    if (response.text) {
-      const goalData = JSON.parse(response.text) as Omit<AIGoal, 'completed'>;
-      return { ...goalData, completed: false };
+    if (response.ok) {
+      const data = await response.json();
+      if (data.goal) return data.goal;
     }
   } catch (error) {
-    console.error("Error generating goal:", error);
+    console.warn("Server Gemini Goal fallback engaged:", error);
   }
-  return null;
+  return getFallbackGoal(stats, grid);
 };
 
 // --- News Feed Generation ---
 
-// @google/genai-schema-fix: The `Schema` type is not exported from @google/genai. Use a const object for the schema.
-const newsSchema = {
-  type: Type.OBJECT,
-  properties: {
-    text: { type: Type.STRING, description: "A one-sentence news headline representing life in the city." },
-    type: { type: Type.STRING, enum: ['positive', 'negative', 'neutral'] },
-  },
-  required: ['text', 'type'],
-};
-
 export const generateNewsEvent = async (stats: CityStats, recentAction: string | null): Promise<NewsItem | null> => {
-  // @google/genai-api-key-fix: The API key must be obtained exclusively from the environment variable `process.env.API_KEY`. Do not add checks for its existence.
-
-  const context = `City Stats - Pop: ${stats.population}, Money: ${stats.money}, Day: ${stats.day}. ${recentAction ? `Recent Action: ${recentAction}` : ''}`;
-  const prompt = "Generate a very short, isometric-sim-city style news headline based on the city state. Can be funny, cynical, or celebratory.";
-
   try {
-    const response = await ai.models.generateContent({
-      model: modelId,
-      // @google/genai-generate-content-fix: For text-only prompts, `contents` should be a single string.
-      contents: `${context}\n${prompt}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: newsSchema,
-        temperature: 1.1, // High temp for variety
-      },
+    const response = await fetch("/api/gemini/news", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stats, recentAction })
     });
 
-    // @google/genai-response-text-fix: Access the `text` property directly from the response.
-    if (response.text) {
-      const data = JSON.parse(response.text);
-      return {
-        id: Date.now().toString() + Math.random(),
-        text: data.text,
-        type: data.type,
-      };
+    if (response.ok) {
+      const data = await response.json();
+      if (data.news) return data.news;
     }
   } catch (error) {
-    console.error("Error generating news:", error);
+    console.warn("Server Gemini News fallback engaged:", error);
   }
-  return null;
+  return getFallbackNews(recentAction);
 };
 
-// --- Tri-Node Ambient Payload & Narrative Directive Generator ---
-
-const directiveSchema = {
-  type: Type.OBJECT,
-  properties: {
-    title: { type: Type.STRING, description: "Actionable municipal governance directive title." },
-    objective: { type: Type.STRING, description: "Detailed directive objective for Sky Metropolis." },
-    sourceDistrict: { type: Type.STRING, enum: ['DIST-PS', 'DIST-RD', 'DIST-OT'] },
-    treasuryReward: { type: Type.INTEGER, description: "Monetary bonus for completion." },
-    rewardYieldMultiplier: { type: Type.NUMBER, description: "Yield multiplier boost between 1.15 and 1.80." },
-    ambientSourceVersion: { type: Type.STRING, description: "Payload tag (e.g. v1.0-ambient-source)." }
-  },
-  required: ['title', 'objective', 'sourceDistrict', 'treasuryReward', 'rewardYieldMultiplier', 'ambientSourceVersion']
-};
+// --- Tri-Node Narrative Payload ---
 
 export const generateArcadeNarrativePayload = async (
   stats: CityStats,
   triNodeState: import('../types').TriNodeState
 ): Promise<import('../types').EcosystemDirective | null> => {
-  const context = `
-    Tri-Node Ecosystem Context:
-    Re-Ality Physical Pulses Ingested: ${triNodeState.physicalPulsesCount}
-    Last Telemetry: ${triNodeState.lastPulse?.telemetryData || 'None'}
-    Arcade City 40Hz Master Pulse: ${triNodeState.homeostasis.masterPulseHz}Hz
-    Homeostasis Stage: Stage ${triNodeState.homeostasis.stage} (${triNodeState.homeostasis.stageName})
-    District Coherence: PS=${triNodeState.homeostasis.districtCoherence['DIST-PS']}%, RD=${triNodeState.homeostasis.districtCoherence['DIST-RD']}%, OT=${triNodeState.homeostasis.districtCoherence['DIST-OT']}%
-    Sky Metropolis Population: ${stats.population}, Treasury: $${stats.money}
-  `;
+  // Use procedural or fallback if needed
+  return getFallbackDirective(triNodeState);
+};
 
-  const prompt = `You are the Aetherium Arcade City Gemini Narrative Engine broadcasting v1.0-ambient-source governance payloads. Generate a high-priority Ecosystem Directive for Sky Metropolis based on district coherence and physical pulse telemetry.`;
+// --- Strategic City & Refinement Analysis ---
+
+export interface CityAnalysisResult {
+  cityGrade: string;
+  executiveSummary: string;
+  supplyChainDiagnosis: string;
+  keyRecommendations: string[];
+  suggestedMayoralDecree: string;
+}
+
+export const generateCityAnalysis = async (
+  stats: CityStats,
+  grid: Grid,
+  refinementState: MaterialRefinementState
+): Promise<CityAnalysisResult | null> => {
+  const counts: Record<string, number> = {};
+  grid.flat().forEach(tile => {
+    counts[tile.buildingType] = (counts[tile.buildingType] || 0) + 1;
+  });
 
   try {
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: `${context}\n${prompt}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: directiveSchema,
-        temperature: 0.95,
-      },
+    const response = await fetch("/api/gemini/city-analysis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stats, counts, refinementState })
     });
 
-    if (response.text) {
-      const data = JSON.parse(response.text);
-      return {
-        id: `directive-${Date.now()}`,
-        sourceDistrict: data.sourceDistrict || 'DIST-PS',
-        title: data.title,
-        objective: data.objective,
-        treasuryReward: data.treasuryReward || 3000,
-        rewardYieldMultiplier: data.rewardYieldMultiplier || 1.4,
-        active: true,
-        ambientSourceVersion: data.ambientSourceVersion || 'v1.0-ambient-source'
-      };
+    if (response.ok) {
+      const data = await response.json();
+      if (data.analysis) return data.analysis;
     }
   } catch (error) {
-    console.error("Error generating Arcade narrative payload:", error);
+    console.warn("Server Gemini City Analysis fallback engaged:", error);
   }
-  return null;
+
+  // Procedural Fallback
+  return {
+    cityGrade: stats.happiness >= 80 ? "A" : stats.happiness >= 65 ? "B" : "C",
+    executiveSummary: `Sky Metropolis is maintaining steady operation on Day ${stats.day} with a population of ${stats.population} citizens and a treasury of $${stats.money}.`,
+    supplyChainDiagnosis: `Refined Aetherium output stands at ${refinementState.refinedAetheriumProduction} units/tick against commercial synthesis demand of ${refinementState.refinedAetheriumDemand} units/tick. Quality of Life multiplier is ${refinementState.qualityOfLifeMultiplier}x.`,
+    keyRecommendations: [
+      "Maintain a balanced 2:1 ratio of Residential zones to Commercial synthesis hubs.",
+      "Upgrade Commercial structures to Level 2+ to unlock full Refined Aetherium Quality of Life bonuses.",
+      "Deploy Atmospheric Shield Domes at key intersections to protect supply chains from storm disruptions."
+    ],
+    suggestedMayoralDecree: "Mayoral Directive: Industrial Refinement Optimization Decree"
+  };
 };

@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "CitySnapshot": {
+      "title": "CitySnapshot",
+      "description": "Historical snapshot of a city grid state and stats.",
+      "type": "object",
+      "properties": {
+        "grid": {
+          "type": "string",
+          "description": "JSON string of city grid layout",
+          "maxLength": 500000
+        },
+        "stats": {
+          "type": "object",
+          "description": "City statistics including population, money, day, happiness"
+        },
+        "author": {
+          "type": "string",
+          "description": "Mayor name",
+          "maxLength": 100
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Firestore Timestamp object"
+        }
+      },
+      "required": ["grid", "stats", "author", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/city_snapshots/{snapshotId}": {
+      "schema": "CitySnapshot",
+      "description": "Public global ledger of saved city snapshots."
+    }
+  }
+}

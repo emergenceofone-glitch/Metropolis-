@@ -7,10 +7,12 @@ import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { MapControls, Environment, SoftShadows, Instance, Instances, Float, useTexture, Outlines, OrthographicCamera, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { MathUtils } from 'three';
-import { Grid, BuildingType, TileData, HintIndicator, WeatherState } from '../types';
+import { Grid, BuildingType, TileData, HintIndicator, WeatherState, WeatherAlert, MaterialRefinementState } from '../types';
+import { calculateTileWeatherPenalty } from '../services/weatherForecastService';
 import { GRID_SIZE, BUILDINGS } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronUp } from 'lucide-react';
+import { SkyBackground } from './SkyBackground';
 
 // Fix for TypeScript not recognizing R3F elements in JSX
 declare global {
@@ -95,9 +97,10 @@ const WindowBlock = React.memo(({ position, scale }: { position: [number, number
   </mesh>
 ));
 
-const SmokeStack = ({ position }: { position: [number, number, number] }) => {
+const SmokeStack = ({ position, isPaused = false }: { position: [number, number, number]; isPaused?: boolean }) => {
   const ref = useRef<THREE.Group>(null);
   useFrame((state) => {
+    if (isPaused) return;
     if (ref.current) {
       ref.current.children.forEach((child, i) => {
         const cloud = child as THREE.Mesh;
@@ -142,9 +145,10 @@ interface BuildingMeshProps {
   opacity?: number;
   transparent?: boolean;
   isNight?: boolean;
+  isPaused?: boolean;
 }
 
-const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opacity = 1, transparent = false, isNight = false }: BuildingMeshProps) => {
+const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opacity = 1, transparent = false, isNight = false, isPaused = false }: BuildingMeshProps) => {
   const hash = getHash(x, y);
   const variant = Math.floor(hash * 100); // 0-99
   const rotation = Math.floor(hash * 4) * (Math.PI / 2);
@@ -340,7 +344,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                 <>
                   <mesh {...commonProps} material={brickMat} geometry={boxGeo} position={[0, 0.75, 0]} scale={[0.75, 1.5, 0.75]} />
                   <mesh {...commonProps} material={accentMat} geometry={boxGeo} position={[0, 1.5, 0]} scale={[0.8, 0.1, 0.8]} />
-                  <SmokeStack position={[0.2, 1.5, 0.2]} />
+                  <SmokeStack position={[0.2, 1.5, 0.2]} isPaused={isPaused} />
                   {[0.2, 0.5, 0.8, 1.1].map(h => (
                     <group key={h} position={[0, h, 0]}>
                       <WindowBlock position={[0, 0, 0.38]} scale={[0.4, 0.15, 0.02]} />
@@ -449,7 +453,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={mainMat} geometry={boxGeo} position={[0, 0.4, 0]} scale={[0.9, 0.8, 0.8]} />
                   <mesh {...commonProps} material={roofMat} geometry={boxGeo} position={[-0.2, 0.9, 0]} scale={[0.4, 0.2, 0.8]} rotation={[0,0,Math.PI/4]} />
                   <mesh {...commonProps} material={roofMat} geometry={boxGeo} position={[0.2, 0.9, 0]} scale={[0.4, 0.2, 0.8]} rotation={[0,0,Math.PI/4]} />
-                  <SmokeStack position={[0.3, 0.4, 0.3]} />
+                  <SmokeStack position={[0.3, 0.4, 0.3]} isPaused={isPaused} />
                   <group position={[0, 0.8, 0]}><RoofAccessories hash={hash} color={color} level={level} /></group>
                 </>
               );
@@ -470,7 +474,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
                   <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[-0.25, 0.3, -0.25]} scale={[0.3, 0.6, 0.3]} />
                   <mesh {...commonProps} material={accentMat} geometry={cylinderGeo} position={[0.25, 0.3, 0.25]} scale={[0.3, 0.6, 0.3]} />
                   <mesh {...commonProps} material={new THREE.MeshStandardMaterial({color: '#4b5563'})} geometry={cylinderGeo} position={[0, 0.5, 0]} scale={[0.1, 1, 0.1]} />
-                  <SmokeStack position={[0, 0.5, 0]} />
+                  <SmokeStack position={[0, 0.5, 0]} isPaused={isPaused} />
                 </>
               )
             } else if (variant < 55) {
@@ -614,7 +618,7 @@ const ProceduralBuilding = React.memo(({ type, baseColor, x, y, level = 1, opaci
 
 const carColors = ['#ef4444', '#3b82f6', '#eab308', '#ffffff', '#1f2937', '#f97316'];
 
-const TrafficSystem = ({ grid }: { grid: Grid }) => {
+const TrafficSystem = ({ grid, isPaused = false }: { grid: Grid; isPaused?: boolean }) => {
   const roadTiles = useMemo(() => {
     const roads: {x: number, y: number}[] = [];
     grid.forEach(row => row.forEach(tile => {
@@ -653,7 +657,7 @@ const TrafficSystem = ({ grid }: { grid: Grid }) => {
   }, [roadTiles, carCount]);
 
   useFrame(() => {
-    if (!carsRef.current || roadTiles.length < 2 || carsState.current.length === 0) return;
+    if (isPaused || !carsRef.current || roadTiles.length < 2 || carsState.current.length === 0) return;
 
     for (let i = 0; i < carCount; i++) {
       const idx = i * 6;
@@ -741,7 +745,7 @@ const TrafficSystem = ({ grid }: { grid: Grid }) => {
 
 const clothesColors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff'];
 
-const PopulationSystem = ({ population, grid }: { population: number, grid: Grid }) => {
+const PopulationSystem = ({ population, grid, isPaused = false }: { population: number, grid: Grid, isPaused?: boolean }) => {
     const agentCount = Math.min(Math.floor(population / 2), 300); 
     const meshRef = useRef<THREE.InstancedMesh>(null);
     
@@ -791,7 +795,7 @@ const PopulationSystem = ({ population, grid }: { population: number, grid: Grid
     }, [agentCount, walkableTiles]);
 
     useFrame((state) => {
-        if (!meshRef.current || agentCount === 0 || agentsState.current.length === 0) return;
+        if (isPaused || !meshRef.current || agentCount === 0 || agentsState.current.length === 0) return;
         const time = state.clock.elapsedTime;
 
         for(let i=0; i<agentCount; i++) {
@@ -854,9 +858,10 @@ const PopulationSystem = ({ population, grid }: { population: number, grid: Grid
 };
 
 // Clouds & Birds
-const Cloud = ({ position, scale, speed, isDark = false }: { position: [number, number, number], scale: number, speed: number, isDark?: boolean }) => {
+const Cloud = ({ position, scale, speed, isDark = false, isPaused = false }: { position: [number, number, number], scale: number, speed: number, isDark?: boolean, isPaused?: boolean }) => {
     const group = useRef<THREE.Group>(null);
     useFrame((state, delta) => {
+        if (isPaused) return;
         if (group.current) {
             group.current.position.x += speed * delta;
             if (group.current.position.x > GRID_SIZE * 1.5) group.current.position.x = -GRID_SIZE * 1.5;
@@ -879,7 +884,7 @@ const Cloud = ({ position, scale, speed, isDark = false }: { position: [number, 
     )
 }
 
-const RainEffect = ({ count = 500 }: { count?: number }) => {
+const RainEffect = ({ count = 500, isPaused = false }: { count?: number; isPaused?: boolean }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const rainData = useMemo(() => {
@@ -896,7 +901,7 @@ const RainEffect = ({ count = 500 }: { count?: number }) => {
   const rainMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#60a5fa', transparent: true, opacity: 0.6 }), []);
 
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
+    if (isPaused || !meshRef.current) return;
     for (let i = 0; i < count; i++) {
         const idx = i * 3;
         rainData[idx + 1] -= delta * 20; // speed
@@ -917,7 +922,7 @@ const RainEffect = ({ count = 500 }: { count?: number }) => {
   );
 };
 
-const SnowEffect = ({ count = 800 }: { count?: number }) => {
+const SnowEffect = ({ count = 800, isPaused = false }: { count?: number; isPaused?: boolean }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const snowData = useMemo(() => {
@@ -934,7 +939,7 @@ const SnowEffect = ({ count = 800 }: { count?: number }) => {
   const snowMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 'white', transparent: true, opacity: 0.8 }), []);
 
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
+    if (isPaused || !meshRef.current) return;
     for (let i = 0; i < count; i++) {
         const idx = i * 3;
         snowData[idx + 1] -= delta * 2; // slow fall
@@ -956,10 +961,11 @@ const SnowEffect = ({ count = 800 }: { count?: number }) => {
   );
 };
 
-const Bird = ({ position, speed, offset }: { position: [number, number, number], speed: number, offset: number }) => {
+const Bird = ({ position, speed, offset, isPaused = false }: { position: [number, number, number], speed: number, offset: number, isPaused?: boolean }) => {
     const ref = useRef<THREE.Group>(null);
     useFrame((state) => {
-        if(ref.current) {
+        if (isPaused) return;
+        if (ref.current) {
             const time = state.clock.elapsedTime + offset;
             ref.current.position.x = position[0] + Math.sin(time * speed) * GRID_SIZE;
             ref.current.position.z = position[1] + Math.cos(time * speed) * GRID_SIZE/2;
@@ -976,23 +982,23 @@ const Bird = ({ position, speed, offset }: { position: [number, number, number],
     )
 }
 
-const EnvironmentEffects = ({ isRaining, isSnowing }: { isRaining: boolean, isSnowing: boolean }) => {
+const EnvironmentEffects = ({ isRaining, isSnowing, isPaused = false }: { isRaining: boolean, isSnowing: boolean, isPaused?: boolean }) => {
     return (
         <group raycast={() => null}>
              {/* Clouds */}
-            <Cloud position={[-12, 8, 4]} scale={1.5} speed={0.3} isDark={isRaining || isSnowing} />
-            <Cloud position={[5, 9, -8]} scale={1.2} speed={0.5} isDark={isRaining || isSnowing} />
-            <Cloud position={[15, 7, 10]} scale={1.8} speed={0.2} isDark={isRaining || isSnowing} />
+            <Cloud position={[-12, 8, 4]} scale={1.5} speed={0.3} isDark={isRaining || isSnowing} isPaused={isPaused} />
+            <Cloud position={[5, 9, -8]} scale={1.2} speed={0.5} isDark={isRaining || isSnowing} isPaused={isPaused} />
+            <Cloud position={[15, 7, 10]} scale={1.8} speed={0.2} isDark={isRaining || isSnowing} isPaused={isPaused} />
             
-            {isRaining && <RainEffect />}
-            {isSnowing && <SnowEffect />}
+            {isRaining && <RainEffect isPaused={isPaused} />}
+            {isSnowing && <SnowEffect isPaused={isPaused} />}
 
             {/* Birds */}
             {!isRaining && !isSnowing && (
                 <group position={[0, 0, 0]} scale={0.8}>
-                    <Bird position={[0, 0, 10]} speed={0.6} offset={0} />
-                    <Bird position={[0, 0, 10]} speed={0.6} offset={1.2} />
-                    <Bird position={[0, 0, 10]} speed={0.6} offset={2.5} />
+                    <Bird position={[0, 0, 10]} speed={0.6} offset={0} isPaused={isPaused} />
+                    <Bird position={[0, 0, 10]} speed={0.6} offset={1.2} isPaused={isPaused} />
+                    <Bird position={[0, 0, 10]} speed={0.6} offset={2.5} isPaused={isPaused} />
                 </group>
             )}
 
@@ -1124,30 +1130,193 @@ const HintIndicatorItem = ({ hint }: { hint: HintIndicator }) => {
   );
 };
 
-const BuildingTooltip = ({ x, y, tile, isNight }: { x: number, y: number, tile: TileData, isNight: boolean }) => {
+const EconomicOverlayTile = ({ tile }: { tile: TileData }) => {
+  const ecoOutput = useMemo(() => {
+    if (tile.buildingType === BuildingType.Commercial) return BUILDINGS[BuildingType.Commercial].incomeGen * (tile.level || 1);
+    if (tile.buildingType === BuildingType.Industrial) return BUILDINGS[BuildingType.Industrial].incomeGen * (tile.level || 1);
+    if (tile.buildingType === BuildingType.Residential) return (BUILDINGS[BuildingType.Residential].popGen * (tile.level || 1)) * 2;
+    return 0;
+  }, [tile]);
+
+  let color = '#ef4444'; // Red for low performing / zero output zones
+  if (ecoOutput >= 40) color = '#22d3ee'; // Cyan for high output
+  else if (ecoOutput > 0) color = '#facc15'; // Yellow for moderate output
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} raycast={() => null}>
+      <planeGeometry args={[0.9, 0.9]} />
+      <meshBasicMaterial color={color} transparent opacity={0.65} side={THREE.DoubleSide} depthTest={false} />
+    </mesh>
+  );
+};
+
+const WeatherOverlayTile = ({ 
+  tile, 
+  grid, 
+  weather, 
+  activeAlert 
+}: { 
+  tile: TileData; 
+  grid: Grid; 
+  weather: WeatherState; 
+  activeAlert: WeatherAlert | null;
+}) => {
+  const penaltyInfo = useMemo(() => {
+    return calculateTileWeatherPenalty(tile, grid, weather, activeAlert);
+  }, [tile, grid, weather, activeAlert]);
+
+  if (tile.buildingType === BuildingType.None || tile.buildingType === BuildingType.Road) {
+    return null;
+  }
+
+  let color = '#10b981';
+  let opacity = 0.4;
+
+  if (penaltyInfo.statusCategory === 'shield') {
+    color = '#06b6d4';
+    opacity = 0.75;
+  } else if (penaltyInfo.statusCategory === 'severe') {
+    color = '#f43f5e';
+    opacity = 0.8;
+  } else if (penaltyInfo.statusCategory === 'moderate') {
+    color = '#f59e0b';
+    opacity = 0.6;
+  }
+
+  return (
+    <group position={[0, 0.03, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <planeGeometry args={[0.92, 0.92]} />
+        <meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} depthTest={false} />
+      </mesh>
+
+      {penaltyInfo.statusCategory === 'severe' && (
+        <Html position={[0, 0.6, 0]} center pointerEvents="none">
+          <div className="px-1.5 py-0.5 rounded bg-rose-950/90 border border-rose-500 text-rose-300 font-mono font-bold text-[9px] shadow-lg animate-pulse whitespace-nowrap">
+            -{penaltyInfo.penaltyPct}% LOSS
+          </div>
+        </Html>
+      )}
+
+      {penaltyInfo.statusCategory === 'shield' && (
+        <Html position={[0, 0.6, 0]} center pointerEvents="none">
+          <div className="px-1.5 py-0.5 rounded bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-mono font-bold text-[9px] shadow-lg whitespace-nowrap">
+            🛡️ DOME
+          </div>
+        </Html>
+      )}
+
+      {penaltyInfo.statusCategory === 'protected' && penaltyInfo.isCoveredByShield && (
+        <Html position={[0, 0.6, 0]} center pointerEvents="none">
+          <div className="px-1 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-mono font-bold text-[8px] shadow-md whitespace-nowrap opacity-80">
+            SAFE
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+};
+
+const BuildingTooltip = ({ 
+  x, 
+  y, 
+  tile, 
+  grid,
+  weather,
+  activeAlert,
+  isNight, 
+  isEconomicOverlayActive,
+  isWeatherOverlayActive
+}: { 
+  x: number; 
+  y: number; 
+  tile: TileData; 
+  grid: Grid;
+  weather: WeatherState;
+  activeAlert: WeatherAlert | null;
+  isNight: boolean; 
+  isEconomicOverlayActive: boolean;
+  isWeatherOverlayActive: boolean;
+}) => {
   const [wx, _, wz] = gridToWorld(x, y);
   const config = BUILDINGS[tile.buildingType];
-  if (!config || tile.buildingType === BuildingType.None || tile.buildingType === BuildingType.Road) return null;
+  
+  const ecoOutput = useMemo(() => {
+    if (!tile || tile.buildingType === BuildingType.None) return 0;
+    if (tile.buildingType === BuildingType.Commercial) return BUILDINGS[BuildingType.Commercial].incomeGen * (tile.level || 1);
+    if (tile.buildingType === BuildingType.Industrial) return BUILDINGS[BuildingType.Industrial].incomeGen * (tile.level || 1);
+    if (tile.buildingType === BuildingType.Residential) return (BUILDINGS[BuildingType.Residential].popGen * (tile.level || 1)) * 2;
+    return 0;
+  }, [tile]);
+
+  const weatherPenaltyInfo = useMemo(() => {
+    return calculateTileWeatherPenalty(tile, grid, weather, activeAlert);
+  }, [tile, grid, weather, activeAlert]);
+
+  const zoneStatus = ecoOutput >= 40 ? 'High Output' : ecoOutput > 0 ? 'Moderate Output' : 'Low-Performing Zone';
+  const statusColor = ecoOutput >= 40 ? 'text-cyan-400' : ecoOutput > 0 ? 'text-yellow-400' : 'text-rose-400';
 
   return (
     <Html position={[wx, 1.2, wz]} center pointerEvents="none">
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className={`px-3 py-2 rounded-xl backdrop-blur-md border border-white/10 shadow-2xl flex flex-col gap-0.5 min-w-[120px] select-none ${
-          isNight ? 'bg-slate-950/80' : 'bg-slate-900/60'
+        className={`px-3 py-2 rounded-xl backdrop-blur-md border border-white/10 shadow-2xl flex flex-col gap-1 min-w-[140px] select-none ${
+          isNight ? 'bg-slate-950/90' : 'bg-slate-900/80'
         }`}
       >
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[10px] font-bold text-white tracking-tight uppercase whitespace-nowrap">{config.name}</span>
-          <div className="flex items-center gap-1">
-             <div className="w-1 h-1 rounded-full bg-cyan-400" />
-             <span className="text-[8px] font-mono text-cyan-400">LVL {tile.level || 1}</span>
+          <span className="text-[10px] font-bold text-white tracking-tight uppercase whitespace-nowrap">{config ? config.name : 'Empty Tile'}</span>
+          {config && (
+            <div className="flex items-center gap-1">
+               <div className="w-1 h-1 rounded-full bg-cyan-400" />
+               <span className="text-[8px] font-mono text-cyan-400">LVL {tile.level || 1}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-[9px] font-mono border-t border-white/10 pt-1">
+          <span className="text-slate-300">Economic Output:</span>
+          <span className="text-emerald-400 font-bold">${ecoOutput}/day</span>
+        </div>
+        {tile.buildingType === BuildingType.Industrial && (
+          <div className="flex items-center justify-between text-[9px] font-mono border-t border-amber-500/20 pt-1 text-amber-300">
+            <span>Refinement Supply:</span>
+            <span className="font-bold">+{ (tile.level || 1) * 10 } Refined/tick</span>
           </div>
-        </div>
-        <div className="text-[8px] text-slate-300 font-medium">
-          {tile.buildingType} District
-        </div>
+        )}
+        {tile.buildingType === BuildingType.Commercial && (tile.level || 1) >= 2 && (
+          <div className="flex items-center justify-between text-[9px] font-mono border-t border-cyan-500/20 pt-1 text-cyan-300">
+            <span>QoL Synthesis:</span>
+            <span className="font-bold">-{ ((tile.level || 1) - 1) * 15 } Refined/tick</span>
+          </div>
+        )}
+        {isEconomicOverlayActive && (
+          <div className={`text-[8px] font-mono font-bold uppercase tracking-wider ${statusColor}`}>
+            ● {zoneStatus}
+          </div>
+        )}
+        {isWeatherOverlayActive && (
+          <div className="border-t border-white/10 pt-1 flex flex-col gap-0.5">
+            <div className="flex items-center justify-between text-[9px] font-mono">
+              <span className="text-slate-300">Weather Incident:</span>
+              <span className={`font-bold ${
+                weatherPenaltyInfo.statusCategory === 'severe' ? 'text-rose-400' :
+                weatherPenaltyInfo.statusCategory === 'moderate' ? 'text-amber-400' :
+                'text-emerald-400'
+              }`}>
+                {weatherPenaltyInfo.penaltyPct > 0 ? `-${weatherPenaltyInfo.penaltyPct}% Loss` : 'Protected'}
+              </span>
+            </div>
+            <div className="text-[8px] font-mono text-slate-400 leading-tight">
+              {weatherPenaltyInfo.statusLabel}
+            </div>
+            {weatherPenaltyInfo.recommendedAction && (
+              <div className="text-[8px] font-mono text-sky-300 bg-sky-500/20 px-1 py-0.5 rounded border border-sky-500/30 mt-0.5">
+                💡 {weatherPenaltyInfo.recommendedAction}
+              </div>
+            )}
+          </div>
+        )}
       </motion.div>
     </Html>
   );
@@ -1215,6 +1384,254 @@ const OptimalSpotMarker = ({ x, y, isNight }: { x: number, y: number, isNight: b
   );
 };
 
+const ResilienceBeacon = ({ level = 1, isPaused = false }: { level?: number; isPaused?: boolean }) => {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((state, delta) => {
+    if (isPaused) return;
+    if (ref.current) {
+      ref.current.rotation.y += delta * 1.5;
+    }
+  });
+
+  const color = level >= 3 ? "#10b981" : level === 2 ? "#06b6d4" : "#3b82f6";
+  const emissive = level >= 3 ? "#059669" : level === 2 ? "#0284c7" : "#2563eb";
+
+  return (
+    <group ref={ref} position={[0, 1.4 + level * 0.2, 0]}>
+      <mesh rotation={[Math.PI / 4, 0, Math.PI / 4]}>
+        <octahedronGeometry args={[0.12, 0]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={1.2} roughness={0.2} />
+      </mesh>
+    </group>
+  );
+};
+
+const BuildingStatusPulse = ({
+  durability = 100,
+  efficiency = 100,
+  onRepair
+}: {
+  durability?: number;
+  efficiency?: number;
+  onRepair?: () => void;
+}) => {
+  const isCritical = durability < 50 || efficiency < 50;
+  const isWarning = durability < 75 || efficiency < 75;
+
+  if (!isCritical && !isWarning) return null;
+
+  const color = isCritical ? "#ef4444" : "#f59e0b";
+
+  return (
+    <group position={[0, 0.05, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.42, 0.58, 24]} />
+        <meshBasicMaterial color={color} transparent opacity={isCritical ? 0.85 : 0.55} side={THREE.DoubleSide} />
+      </mesh>
+
+      <Html position={[0, 1.8, 0]} center pointerEvents="none">
+        <motion.div
+          animate={{ y: [0, -3, 0], scale: [1, 1.05, 1] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+          className={`px-2 py-0.5 rounded-lg font-mono font-black text-[8px] tracking-wider uppercase border shadow-xl flex items-center gap-1 ${
+            isCritical
+              ? "bg-red-500 text-white border-red-300 shadow-red-500/30"
+              : "bg-amber-500 text-amber-950 border-amber-300 shadow-amber-500/20"
+          }`}
+        >
+          <span>{isCritical ? "⚠️ DAMAGED" : "⚡ EFFICIENCY DROP"}</span>
+          <span>{durability}%</span>
+        </motion.div>
+      </Html>
+    </group>
+  );
+};
+
+const InspectionDrone = ({
+  dronePos,
+  isPaused = false
+}: {
+  dronePos: { x: number; y: number } | null;
+  isPaused?: boolean;
+}) => {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame((state, delta) => {
+    if (isPaused || !groupRef.current || !dronePos) return;
+
+    const [targetX, _, targetZ] = gridToWorld(dronePos.x, dronePos.y);
+    groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, targetX, delta * 4);
+    groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, delta * 4);
+    groupRef.current.position.y = 3.6 + Math.sin(state.clock.elapsedTime * 4) * 0.15;
+  });
+
+  if (!dronePos) return null;
+  const initialPos = gridToWorld(dronePos.x, dronePos.y);
+
+  return (
+    <group ref={groupRef} position={[initialPos[0], 3.6, initialPos[2]]}>
+      {/* Central Drone Chassis */}
+      <mesh geometry={boxGeo} scale={[0.45, 0.12, 0.45]}>
+        <meshStandardMaterial color="#020617" metalness={0.9} roughness={0.1} />
+      </mesh>
+      <mesh geometry={sphereGeo} scale={[0.16, 0.1, 0.16]} position={[0, 0.08, 0]}>
+        <meshStandardMaterial color="#10b981" emissive="#10b981" emissiveIntensity={2.5} />
+      </mesh>
+
+      {/* LiDAR Scan Light Beam Cone */}
+      <mesh position={[0, -1.8, 0]} rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[1.0, 3.6, 16, 1, true]} />
+        <meshBasicMaterial color="#10b981" transparent opacity={0.22} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Target Laser Ring on Ground */}
+      <mesh position={[0, -3.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.35, 0.55, 24]} />
+        <meshBasicMaterial color="#34d399" transparent opacity={0.85} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Floating LiDAR Badge */}
+      <Html position={[0, 0.8, 0]} center pointerEvents="none">
+        <div className="bg-slate-950/90 text-emerald-300 border border-emerald-400/60 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold tracking-widest uppercase shadow-lg shadow-emerald-500/20 whitespace-nowrap flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+          <span>INSPECTION DRONE</span>
+        </div>
+      </Html>
+    </group>
+  );
+};
+
+const AtmosphericShieldDome = ({ x, y, isWeatherActive, isPaused = false }: { x: number; y: number; isWeatherActive: boolean; isPaused?: boolean }) => {
+  const [wx, _, wz] = gridToWorld(x, y);
+  const domeRef = useRef<THREE.Group>(null);
+
+  useFrame((state, delta) => {
+    if (isPaused) return;
+    if (domeRef.current) {
+      domeRef.current.rotation.y += delta * 0.15;
+    }
+  });
+
+  return (
+    <group ref={domeRef} position={[wx, 0.2, wz]}>
+      {/* Translucent Forcefield Hemisphere Bubble */}
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[4.0, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5]} />
+        <meshStandardMaterial
+          color="#06b6d4"
+          emissive="#22d3ee"
+          emissiveIntensity={isWeatherActive ? 0.9 : 0.3}
+          transparent
+          opacity={isWeatherActive ? 0.28 : 0.12}
+          side={THREE.DoubleSide}
+          roughness={0.1}
+          metalness={0.8}
+        />
+      </mesh>
+      {/* Base Radius Ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[3.9, 4.1, 48]} />
+        <meshBasicMaterial
+          color="#22d3ee"
+          transparent
+          opacity={isWeatherActive ? 0.8 : 0.4}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+};
+
+interface RefinementSupplyChainIndicatorProps {
+  x: number;
+  y: number;
+  tile: TileData;
+  isPaused?: boolean;
+  surgeActive?: boolean;
+}
+
+const RefinementSupplyChainIndicator: React.FC<RefinementSupplyChainIndicatorProps> = ({
+  x,
+  y,
+  tile,
+  isPaused = false,
+  surgeActive = false
+}) => {
+  const ringRef = useRef<THREE.Group>(null);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(() => {
+      setProgress(prev => (prev >= 100 ? 0 : prev + 5));
+    }, 120);
+    return () => clearInterval(interval);
+  }, [isPaused]);
+
+  useFrame((state, delta) => {
+    if (isPaused) return;
+    if (ringRef.current) {
+      ringRef.current.rotation.y += delta * 1.5;
+    }
+  });
+
+  const isIndustrial = tile.buildingType === BuildingType.Industrial;
+  const isCommercialHub = tile.buildingType === BuildingType.Commercial && (tile.level || 1) >= 2;
+
+  if (!isIndustrial && !isCommercialHub) return null;
+
+  const level = tile.level || 1;
+  const ringColor = isIndustrial ? "#fbbf24" : "#06b6d4";
+  const label = isIndustrial ? `+${level * 10} Refined` : `QoL Synthesis`;
+
+  return (
+    <group position={[0, 0.05, 0]}>
+      {/* 3D Glowing Ground Aura Ring */}
+      <group ref={ringRef} position={[0, 0.02, 0]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.55, 0.72, 32]} />
+          <meshBasicMaterial
+            color={ringColor}
+            transparent
+            opacity={surgeActive ? 0.85 : 0.5}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </group>
+
+      {/* Floating HTML Progress Bar & Glow Badge */}
+      <Html position={[0, 1.8 + level * 0.35, 0]} center pointerEvents="none">
+        <div className="flex flex-col items-center gap-1 select-none">
+          {/* Badge */}
+          <div
+            className={`px-2 py-0.5 rounded-full font-mono font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 shadow-lg border backdrop-blur-md transition-all ${
+              isIndustrial
+                ? 'bg-amber-950/85 text-amber-300 border-amber-500/60 shadow-amber-500/30'
+                : 'bg-cyan-950/85 text-cyan-300 border-cyan-500/60 shadow-cyan-500/30'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full animate-ping ${isIndustrial ? 'bg-amber-400' : 'bg-cyan-400'}`} />
+            <span>{label}</span>
+            {surgeActive && <span className="text-[8px] bg-amber-500 text-slate-950 px-1 rounded font-extrabold ml-0.5">SURGE</span>}
+          </div>
+
+          {/* Animated Supply Chain Progress Bar */}
+          <div className="w-16 h-1.5 bg-slate-950/90 border border-white/20 rounded-full overflow-hidden p-0.5 shadow-md flex items-center">
+            <motion.div
+              className={`h-full rounded-full transition-all duration-150 ${
+                isIndustrial
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-300 shadow-[0_0_8px_rgba(251,191,36,0.9)]'
+                  : 'bg-gradient-to-r from-cyan-500 to-emerald-300 shadow-[0_0_8px_rgba(6,182,212,0.9)]'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+};
+
 interface IsoMapProps {
   grid: Grid;
   onTileClick: (x: number, y: number) => void;
@@ -1222,12 +1639,36 @@ interface IsoMapProps {
   hoveredTool: BuildingType;
   population: number;
   weather: WeatherState;
+  activeAlert?: WeatherAlert | null;
   hints: HintIndicator[];
   money: number;
   optimalSpot?: { x: number; y: number; score: number; explanation: string } | null;
+  isEconomicOverlayActive?: boolean;
+  isWeatherOverlayActive?: boolean;
+  isPaused?: boolean;
+  refinementState?: MaterialRefinementState;
+  dronePos?: { x: number; y: number } | null;
+  isDroneActive?: boolean;
 }
 
-const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hoveredTool, population, weather, hints, money, optimalSpot }) => {
+const IsoMap: React.FC<IsoMapProps> = ({ 
+  grid, 
+  onTileClick, 
+  onHoverTile, 
+  hoveredTool, 
+  population, 
+  weather, 
+  activeAlert = null,
+  hints, 
+  money, 
+  optimalSpot, 
+  isEconomicOverlayActive = false, 
+  isWeatherOverlayActive = false,
+  isPaused = false,
+  refinementState,
+  dronePos = null,
+  isDroneActive = true
+}) => {
   const [hoveredTile, setHoveredTile] = useState<{x: number, y: number} | null>(null);
 
   const handleHover = useCallback((x: number, y: number) => {
@@ -1258,10 +1699,11 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
   const directionalColor = isNight ? "#334155" : (weather.isRaining ? "#94a3b8" : (weather.isSnowing ? "#f8fafc" : (isEvening ? "#fb923c" : "#fffbeb")));
 
   return (
-    <div className={`absolute inset-0 transition-colors duration-1000 touch-none ${
-      isNight ? 'bg-slate-950' : isEvening ? 'bg-orange-900/40' : isMorning ? 'bg-sky-800' : 'bg-sky-900'
-    }`}>
-      <Canvas shadows dpr={[1, 1.5]} gl={{ antialias: true }}>
+    <div className="absolute inset-0 touch-none overflow-hidden">
+      {/* Animated Sky Background based on Time of Day & Weather */}
+      <SkyBackground weather={weather} />
+
+      <Canvas shadows dpr={[1, 1.5]} gl={{ antialias: true, alpha: true }}>
         <OrthographicCamera makeDefault zoom={45} position={[20, 20, 20]} near={-100} far={200} />
         
         <MapControls 
@@ -1294,19 +1736,24 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
         )}
         <Environment preset={isNight ? "night" : (weather.isRaining ? "night" : (weather.isSnowing ? "apartment" : (isEvening ? "sunset" : "city")))} />
 
-        <EnvironmentEffects isRaining={weather.isRaining} isSnowing={weather.isSnowing} />
+        <EnvironmentEffects isRaining={weather.isRaining} isSnowing={weather.isSnowing} isPaused={isPaused} />
 
         <AnimatePresence>
           {hints.map(hint => (
             <HintIndicatorItem key={hint.id} hint={hint} />
           ))}
-          {hoveredTile && grid[hoveredTile.y][hoveredTile.x].buildingType !== BuildingType.None && (
+          {hoveredTile && (
             <BuildingTooltip 
               key={`tooltip-${hoveredTile.x}-${hoveredTile.y}`}
               x={hoveredTile.x} 
               y={hoveredTile.y} 
               tile={grid[hoveredTile.y][hoveredTile.x]} 
+              grid={grid}
+              weather={weather}
+              activeAlert={activeAlert}
               isNight={isNight}
+              isEconomicOverlayActive={isEconomicOverlayActive}
+              isWeatherOverlayActive={isWeatherOverlayActive}
             />
           )}
         </AnimatePresence>
@@ -1330,14 +1777,40 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
                 
                 {/* Building visual - apply world position to group to align with ground tile */}
                 <group position={[wx, 0, wz]} raycast={() => null}>
-                    {tile.buildingType !== BuildingType.None && tile.buildingType !== BuildingType.Road && (
-                      <ProceduralBuilding 
-                        type={tile.buildingType} 
-                        baseColor={BUILDINGS[tile.buildingType].color} 
-                        x={x} y={y} 
-                        level={tile.level}
-                        isNight={isNight}
+                    {isEconomicOverlayActive && <EconomicOverlayTile tile={tile} />}
+                    {isWeatherOverlayActive && (
+                      <WeatherOverlayTile
+                        tile={tile}
+                        grid={grid}
+                        weather={weather}
+                        activeAlert={activeAlert}
                       />
+                    )}
+                    {tile.buildingType !== BuildingType.None && tile.buildingType !== BuildingType.Road && (
+                      <>
+                        <ProceduralBuilding 
+                          type={tile.buildingType} 
+                          baseColor={BUILDINGS[tile.buildingType].color} 
+                          x={x} y={y} 
+                          level={tile.level}
+                          isNight={isNight}
+                          isPaused={isPaused}
+                        />
+                        {((tile.resilienceLevel && tile.resilienceLevel > 0) || tile.isResilient) && (
+                          <ResilienceBeacon level={tile.resilienceLevel || (tile.isResilient ? 3 : 1)} isPaused={isPaused} />
+                        )}
+                        <RefinementSupplyChainIndicator 
+                          x={x} 
+                          y={y} 
+                          tile={tile} 
+                          isPaused={isPaused} 
+                          surgeActive={refinementState?.surgeActive} 
+                        />
+                        <BuildingStatusPulse 
+                          durability={tile.durability} 
+                          efficiency={tile.efficiency} 
+                        />
+                      </>
                     )}
                     {(() => {
                       if (tile.buildingType === BuildingType.None || tile.buildingType === BuildingType.Road) return null;
@@ -1355,8 +1828,9 @@ const IsoMap: React.FC<IsoMapProps> = ({ grid, onTileClick, onHoverTile, hovered
 
           {/* Visual Elements - disable pointer events */}
           <group raycast={() => null}>
-            <TrafficSystem grid={grid} />
-            <PopulationSystem population={population} grid={grid} />
+            <TrafficSystem grid={grid} isPaused={isPaused} />
+            <PopulationSystem population={population} grid={grid} isPaused={isPaused} />
+            <InspectionDrone dronePos={dronePos} isPaused={isPaused} />
 
             {/* Optimal Placement assist target */}
             {optimalSpot && (

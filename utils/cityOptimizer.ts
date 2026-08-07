@@ -228,6 +228,24 @@ export const findOptimalPosition = (grid: Grid, tool: BuildingType): OptimalPosi
           }
           break;
         }
+
+        case BuildingType.AtmosphericShield: {
+          if (hasRoadAdjacent) {
+            score += 15;
+            reasons.push("Connected to urban grid power");
+          } else {
+            score -= 10;
+          }
+
+          const nearbyBuildings = mediumNeighbors.filter(n => n.buildingType !== BuildingType.None && n.buildingType !== BuildingType.Road);
+          if (nearbyBuildings.length > 0) {
+            score += nearbyBuildings.length * 12;
+            reasons.push("Shields dense urban cluster from severe weather");
+          } else {
+            reasons.push("Optimal position for broad shield dome coverage");
+          }
+          break;
+        }
       }
 
       if (score > bestScore) {

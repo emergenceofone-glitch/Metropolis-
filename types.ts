@@ -10,6 +10,7 @@ export enum BuildingType {
   Industrial = 'Industrial',
   Park = 'Park',
   Monument = 'Monument',
+  AtmosphericShield = 'AtmosphericShield',
 }
 
 export interface BuildingConfig {
@@ -27,8 +28,11 @@ export interface TileData {
   y: number;
   buildingType: BuildingType;
   level?: number; // Building level (1, 2, 3...)
-  // Suggested by AI for visual variety later
   variant?: number;
+  resilienceLevel?: number; // 0 = Standard, 1 = Weather-Sealed, 2 = Storm-Fortified, 3 = Atmospheric-Mastered (100% Weather Immune)
+  isResilient?: boolean; // True when resilienceLevel > 0
+  durability?: number; // 0-100% building structural integrity
+  efficiency?: number; // 0-100% operational efficiency
 }
 
 export type Grid = TileData[][];
@@ -118,7 +122,7 @@ export interface TriNodeState {
 
 // --- City Chronicle Legacy Types ---
 
-export type ChronicleCategory = 'milestone' | 'goal' | 'disaster' | 'directive' | 'historical';
+export type ChronicleCategory = 'milestone' | 'goal' | 'disaster' | 'directive' | 'historical' | 'weather';
 
 export interface ChronicleEntry {
   id: string;
@@ -130,4 +134,61 @@ export interface ChronicleEntry {
   impact?: string;
   location?: { x: number; y: number };
 }
+
+// --- Aetherium Market Fluctuation Types ---
+
+export interface AetheriumMarketPoint {
+  day: number;
+  price: number;
+  eventTitle?: string;
+  changePercent?: number;
+}
+
+export interface GlobalMarketEvent {
+  id: string;
+  name: string;
+  description: string;
+  type: 'boom' | 'crash' | 'demand_surge' | 'supply_shortage' | 'normal';
+  multiplier: number;
+  affectedSector: 'All' | 'Commercial' | 'Industrial' | 'Residential';
+  durationDays: number;
+  daysRemaining: number;
+}
+
+export interface AetheriumMarketState {
+  currentPrice: number;
+  previousPrice: number;
+  priceHistory: AetheriumMarketPoint[];
+  activeEvent: GlobalMarketEvent | null;
+  overallMultiplier: number;
+  volatility: 'Low' | 'Moderate' | 'High' | 'Extreme';
+  trend: 'up' | 'down' | 'stable';
+}
+
+// --- Material Refinement System Types ---
+
+export type RefinementPurityTier = 'Standard' | 'Synthesized' | 'Hyper-Refined' | 'Quantum-Grade';
+
+export interface RefinementHistoryPoint {
+  day: number;
+  production: number;      // Industrial Output
+  demand: number;          // Commercial Input/Demand
+  netBalance: number;      // Surplus/Deficit (Production - Demand)
+  qolBonusPercent: number; // Quality of Life Bonus % (e.g., 20 = +20%)
+}
+
+export interface MaterialRefinementState {
+  refinedAetheriumProduction: number; // Output by industrial buildings (units per tick)
+  refinedAetheriumDemand: number;     // Consumed by level 2+ commercial buildings (units per tick)
+  satisfactionRatio: number;          // 0 to 1+ (production / demand)
+  qualityOfLifeMultiplier: number;    // e.g., 1.00 to 1.50 (100% to 150%)
+  industrialBuildingCount: number;    // Count of active industrial buildings
+  commercialHubCount: number;         // Count of level 2+ commercial hubs
+  purityTier: RefinementPurityTier;   // Current refined purity grade
+  surgeActive: boolean;               // True if player triggered a refinement surge
+  surgeDaysRemaining: number;         // Surge countdown
+  history: RefinementHistoryPoint[];  // Real-time input/output trend history
+}
+
+
 

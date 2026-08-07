@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /city_snapshots/{snapshotId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['grid', 'stats', 'author', 'timestamp'])
+                    && request.resource.data.grid is string
+                    && request.resource.data.grid.size() < 500000
+                    && request.resource.data.author is string
+                    && request.resource.data.author.size() <= 100;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
